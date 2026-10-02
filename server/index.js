@@ -87,10 +87,18 @@ app.use('/api', api);
 
 /* -------------------------------- static --------------------------------- */
 const SW = fs.readFileSync(path.join(PUBLIC, 'sw.js'), 'utf8');
-const CACHE_TAG = process.env.CACHE_TAG || String(Date.now());
+let BUILD_TAG = '';
+try {
+  BUILD_TAG = fs.readFileSync(path.join(ROOT, 'build-tag.txt'), 'utf8').trim();
+} catch {}
+const CACHE_TAG = process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || process.env.CACHE_TAG || BUILD_TAG || 'v1.14.2';
 
 app.get('/sw.js', (req, res) => {
-  res.set({ 'Content-Type': 'application/javascript; charset=utf-8', 'Service-Worker-Allowed': '/', 'Cache-Control': 'no-cache' });
+  res.set({
+    'Content-Type': 'application/javascript; charset=utf-8',
+    'Service-Worker-Allowed': '/',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+  });
   res.send(`/* build:${CACHE_TAG} */\n${SW}`);
 });
 

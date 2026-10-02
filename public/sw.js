@@ -62,8 +62,7 @@ self.addEventListener('install', (event) => {
       .then((c) => c.addAll(SHELL_ASSETS).catch(() => {
         // Non-fatal: cache whatever we can, one by one.
         return Promise.allSettled(SHELL_ASSETS.map((u) => c.add(u).catch(() => {})));
-      }))
-      .then(() => self.skipWaiting()),
+      })),
   );
 });
 

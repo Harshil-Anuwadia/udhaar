@@ -13,7 +13,7 @@
     "start": "node server/start.js",
     "dev": "node --env-file=.env --watch server/start.js",
     "dev:local": "node --watch server/start.js",
-    "vercel-build": "echo 'No build step — static assets are pre-built'"
+    "vercel-build": "node scripts/build-tag.js"
   },
   "keywords": [],
   "author": "",

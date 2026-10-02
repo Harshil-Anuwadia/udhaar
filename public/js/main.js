@@ -234,23 +234,34 @@ function wireLifecycle() {
 function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   window.addEventListener('load', () => {
-    // A worker taking control on first install is normal (skipWaiting + claim) —
-    // the page already has fresh bytes, so only snap over on real mid-session updates.
-    const hadController = !!navigator.serviceWorker.controller;
+    let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!hadController) return;
-      if (sessionStorage.getItem('sw-reloaded')) return;
-      sessionStorage.setItem('sw-reloaded', '1');
+      if (refreshing) return;
+      refreshing = true;
       location.reload();
     });
+
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
       .then((reg) => {
-        // Refresh the cached shell when a new worker takes over.
+        const promptUpdate = (worker) => {
+          toast('New version of Udhaar is ready.', {
+            action: 'Reload',
+            duration: 10000,
+            onAction: () => {
+              worker?.postMessage('skip-waiting');
+            },
+          });
+        };
+
+        if (reg.waiting && navigator.serviceWorker.controller) {
+          promptUpdate(reg.waiting);
+        }
+
         reg.addEventListener('updatefound', () => {
           const w = reg.installing;
           w?.addEventListener('statechange', () => {
             if (w.state === 'installed' && navigator.serviceWorker.controller) {
-              toast('New version of Udhaar is ready.', { action: 'Reload', onAction: () => location.reload() , duration: 8000 });
+              promptUpdate(w);
             }
           });
         });
