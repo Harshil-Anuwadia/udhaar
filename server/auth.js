@@ -74,7 +74,9 @@ export async function requireAuth(req, res, next) {
     const user = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(payload.sub);
     if (!user) return res.status(401).json({ error: 'unauthenticated', message: 'Session expired.' });
     req.user = user;
-    await db.prepare(`UPDATE users SET last_seen_at = ? WHERE id = ?`).run(now(), user.id);
+    if (now() - user.last_seen_at > 5 * 60_000) {
+      db.prepare(`UPDATE users SET last_seen_at = ? WHERE id = ?`).run(now(), user.id).catch(() => {});
+    }
     next();
   } catch {
     return res.status(401).json({ error: 'unauthenticated', message: 'Session expired. Sign in again.' });

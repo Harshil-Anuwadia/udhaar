@@ -49,7 +49,7 @@ r.post('/', validate(EntrySchema), async (req, res) => {
   }
 
   const openCount = (await db
-    .prepare(`SELECT COUNT(*) AS n FROM entries WHERE owner_id = ?`)
+    .prepare(`SELECT COUNT(*) AS n FROM entries WHERE owner_id = ? AND status = 'open'`)
     .get(req.user.id)).n;
   if (req.user.plan === 'free' && openCount >= FREE_ENTRY_LIMIT) {
     return res.status(402).json({
@@ -134,6 +134,7 @@ r.post('/:id/settle', async (req, res) => {
   const e = await ownEntry(req.user.id, req.params.id);
   if (!e) return res.status(404).json({ error: 'not_found', message: 'Entry not found.' });
   if (e.status === 'settled') return res.status(409).json({ error: 'already', message: 'Already settled.' });
+  if (e.status === 'void') return res.status(409).json({ error: 'voided', message: 'This entry was voided — reopen it first.' });
 
   const partial = Math.max(0, Math.min(Number(req.body?.amount ?? e.amount), e.amount));
   const t = now();
@@ -170,6 +171,9 @@ r.post('/:id/reopen', async (req, res) => {
 r.post('/:id/remind', async (req, res) => {
   const e = await ownEntry(req.user.id, req.params.id);
   if (!e) return res.status(404).json({ error: 'not_found', message: 'Entry not found.' });
+  if (e.status !== 'open') {
+    return res.status(409).json({ error: 'not_open', message: 'That entry is already settled or closed.' });
+  }
   if (e.direction !== 'owed_to_me') {
     return res.status(400).json({ error: 'not_yours_to_chase', message: 'That one’s on you — settle it instead of nudging.' });
   }

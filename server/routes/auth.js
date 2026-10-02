@@ -44,7 +44,13 @@ r.post('/signup', authBurst, validate(SignupSchema), async (req, res) => {
     return res.status(409).json({ error: 'handle_taken', message: `@${rawHandle} is already taken.`, field: 'handle' });
   }
   let handle = rawHandle || suggestHandle(name, () => false);
-  while (!rawHandle && await handleTaken(handle)) handle = `${handle}${Math.floor(10 + Math.random() * 89)}`;
+  if (!rawHandle) {
+    let _attempts = 0;
+    while (await handleTaken(handle) && _attempts < 20) {
+      handle = `${suggestHandle(name, () => false)}${Math.floor(10 + Math.random() * 89)}`;
+      _attempts++;
+    }
+  }
 
   const isEmail = c.includes('@');
   if (c) {

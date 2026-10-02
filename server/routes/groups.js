@@ -150,8 +150,12 @@ r.patch('/:id', async (req, res) => {
   const g = await ownGroup(req.user.id, req.params.id);
   if (!g) return res.status(404).json({ error: 'not_found', message: 'Group not found.' });
   const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 40) : null;
-  await db.prepare(`UPDATE groups SET name = COALESCE(?, name), archived = ? WHERE id = ?`).run(
+  const archiveProvided = req.body != null && 'archived' in req.body;
+  await db.prepare(
+    `UPDATE groups SET name = COALESCE(?, name), archived = CASE WHEN ? THEN ? ELSE archived END WHERE id = ?`
+  ).run(
     name || null,
+    archiveProvided ? 1 : 0,
     req.body?.archived ? 1 : 0,
     g.id,
   );
