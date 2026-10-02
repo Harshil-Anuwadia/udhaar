@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS entries (
 );
 CREATE INDEX IF NOT EXISTS idx_entries_friendship ON entries(friendship_id, status);
 CREATE INDEX IF NOT EXISTS idx_entries_owner ON entries(owner_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_entries_split ON entries(split_id);
+CREATE INDEX IF NOT EXISTS idx_entries_group ON entries(group_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_group_members_friendship ON group_members(friendship_id);
 CREATE TABLE IF NOT EXISTS groups (
   id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL, currency TEXT NOT NULL DEFAULT 'INR', avatar_seed INTEGER NOT NULL DEFAULT 0,
@@ -56,6 +59,7 @@ CREATE TABLE IF NOT EXISTS split_shares (
   friendship_id TEXT NOT NULL REFERENCES friendships(id) ON DELETE CASCADE,
   amount INTEGER NOT NULL, PRIMARY KEY (split_id, friendship_id)
 );
+CREATE INDEX IF NOT EXISTS idx_split_shares_split ON split_shares(split_id);
 CREATE TABLE IF NOT EXISTS links (
   id TEXT PRIMARY KEY, friendship_id TEXT NOT NULL REFERENCES friendships(id) ON DELETE CASCADE,
   owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, token TEXT NOT NULL, kind TEXT NOT NULL,
@@ -63,6 +67,7 @@ CREATE TABLE IF NOT EXISTS links (
   claimed_by TEXT REFERENCES users(id) ON DELETE SET NULL, claimed_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_links_token ON links(token);
+CREATE INDEX IF NOT EXISTS idx_links_friendship ON links(friendship_id, kind);
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   friendship_id TEXT REFERENCES friendships(id) ON DELETE CASCADE,
@@ -74,10 +79,13 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER
 );
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires ON refresh_tokens(expires_at);
 CREATE TABLE IF NOT EXISTS invite_codes (
   code TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   used_by TEXT REFERENCES users(id) ON DELETE SET NULL, created_at INTEGER NOT NULL, used_at INTEGER
 );
+CREATE INDEX IF NOT EXISTS idx_invite_codes_owner ON invite_codes(owner_id);
 CREATE TABLE IF NOT EXISTS media (
   id TEXT PRIMARY KEY, content_type TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL
 );
