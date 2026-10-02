@@ -15,9 +15,17 @@ import { groupPosition } from '../core/group-position.js';
 const PALETTE = ['#8A5A44', '#5B6B8C', '#6E7B52', '#8C6E3F', '#7A5A80', '#4E7676', '#96564A', '#5F6E4E'];
 
 export async function viewGroups({ outlet }) {
-  mount(outlet, 'app', () => `<div class="card skeleton" style="height:120px"></div><div class="card skeleton" style="height:120px"></div>`);
   setHeader({ title: 'Groups', sub: 'The split, minus the chat maths' });
   showFab(false);
+
+  // Instant paint from cache
+  const cachedGroups = state.groups;
+  const cachedFriends = state.friends;
+  if (cachedGroups && cachedFriends) {
+    mount(outlet, 'app', () => groupsHTML(cachedGroups, cachedFriends), (main) => bindGroups(main, cachedGroups, cachedFriends));
+  } else {
+    mount(outlet, 'app', () => `<div class="card skeleton" style="height:120px"></div><div class="card skeleton" style="height:120px"></div>`);
+  }
 
   const [groupsRes, friendsRes] = await Promise.all([api.groups(), api.friends()]);
   setState({ groups: groupsRes.groups, friends: friendsRes.friends });

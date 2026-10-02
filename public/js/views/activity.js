@@ -19,9 +19,16 @@ const TYPE_META = {
 };
 
 export async function viewActivity({ outlet }) {
-  mount(outlet, 'app', () => `<div class="card skeleton" style="height:80px"></div><div class="card skeleton" style="height:80px"></div>`);
   setHeader({ title: 'Alerts' });
   showFab(true);
+
+  // Instant paint from cache
+  const cachedEvents = state.events;
+  if (cachedEvents) {
+    mount(outlet, 'app', () => activityHTML(cachedEvents, [], cachedEvents.length > 0), (main) => bind(main, cachedEvents, []));
+  } else {
+    mount(outlet, 'app', () => `<div class="card skeleton" style="height:80px"></div><div class="card skeleton" style="height:80px"></div>`);
+  }
 
   let events = [];
   let incoming = [];
