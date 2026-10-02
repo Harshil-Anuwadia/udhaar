@@ -1,0 +1,70 @@
+/* Inline SVG icon set — 24px grid, 1.7 stroke, currentColor. */
+
+const S = (d, extra = '') =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"${extra}>${d}</svg>`;
+
+const F = (d) => `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${d}</svg>`;
+
+export const Icon = {
+  wallet: S('<path d="M19 8V5H6a3 3 0 0 0 0 6h14v9H6a3 3 0 0 1-3-3V8"/><path d="M20 12h-5a2 2 0 0 0 0 4h5"/><circle cx="15.5" cy="14" r=".7" fill="currentColor" stroke="none"/>'),
+  coins: S('<ellipse cx="9" cy="7" rx="6" ry="3"/><path d="M3 7v5c0 4 12 4 12 0V7M3 12v5c0 4 12 4 12 0v-5m3-1c5 0 5 6 0 6m0-11c5 0 5 5 0 5"/>'),
+  palette: S('<path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-3.7c-1-.6-.6-2.3.7-2.3H18c4 0 4-12-6-12Z"/><circle cx="7" cy="10" r="1" fill="currentColor"/><circle cx="10" cy="6.5" r="1" fill="currentColor"/><circle cx="15" cy="7" r="1" fill="currentColor"/>'),
+  device: S('<rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M10 5h4m-3 13.5h2"/>'),
+  receipt: S('<path d="M5 3v18l3-2 4 2 4-2 3 2V3l-3 2-4-2-4 2-3-2Z"/><path d="M9 9h6m-6 4h6m-6 4h2"/>'),
+  fileExport: S('<path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3M13 3v5h5l-5-5Z"/><path d="M11 14h11m-3-3 3 3-3 3"/>'),
+  camera: S('<path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11H3V8a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/><path d="M18 10h.01"/>'),
+  ledger: S('<rect x="5" y="3" width="15" height="18" rx="3"/><path d="M9 3v18m3-13h5m-5 4h5m-5 4h3M3 7h4M3 12h4M3 17h4"/>'),
+  ledgerFill: S('<rect x="5" y="3" width="15" height="18" rx="3" fill="currentColor" fill-opacity=".12"/><path d="M9 3v18m3-13h5m-5 4h5m-5 4h3M3 7h4M3 12h4M3 17h4"/>'),
+  plus: S('<path d="M12 5v14M5 12h14"/>'),
+  minus: S('<path d="M5 12h14"/>'),
+  people: S('<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m2 3c2 1 3 2 3 4v2"/>'),
+  peopleFill: S('<circle cx="9" cy="8" r="3" fill="currentColor" fill-opacity=".15"/><path d="M3 20v-2a6 6 0 0 1 12 0v2Z" fill="currentColor" fill-opacity=".15"/><path d="M16 5a3 3 0 0 1 0 6m2 3c2 1 3 2 3 4v2"/>'),
+  bell: S('<path d="M18 8.5a6 6 0 1 0-12 0c0 6-2.2 7.5-2.2 7.5h16.4S18 14.5 18 8.5"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/>'),
+  bellFill: S('<path d="M6 9a6 6 0 0 1 12 0v5l2 3H4l2-3V9Z" fill="currentColor" fill-opacity=".15"/><path d="M10 21h4M12 2V1"/>'),
+  you: S('<circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a7 7 0 0 1 14 0v1"/>'),
+  youFill: S('<circle cx="12" cy="8" r="3.5" fill="currentColor" fill-opacity=".15"/><path d="M5 20v-1a7 7 0 0 1 14 0v1Z" fill="currentColor" fill-opacity=".15"/>'),
+  back: S('<path d="M15 5l-7 7 7 7"/>'),
+  close: S('<path d="M6 6l12 12M18 6L6 18"/>'),
+  check: S('<path d="M4.5 12.5l5 5L19.5 7"/>'),
+  eye: S('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>'),
+  checkCircle: S('<circle cx="12" cy="12" r="9"/><path d="M8.2 12.3l2.6 2.6 5-5.2"/>'),
+  chevR: S('<path d="M9 5l7 7-7 7"/>'),
+  chevD: S('<path d="M5 9l7 7 7-7"/>'),
+  share: S('<path d="M12 15V3.5"/><path d="M8.2 7.2L12 3.4l3.8 3.8"/><path d="M20 13v6.2a1.8 1.8 0 0 1-1.8 1.8H5.8A1.8 1.8 0 0 1 4 19.2V13"/>'),
+  send: S('<path d="M21 3 3 10l7 3 3 8 8-18Z"/><path d="M10 13 21 3"/>'),
+  copy: S('<rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M5.5 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v.5"/>'),
+  trash: S('<path d="M4 7h16"/><path d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7"/><path d="M6.4 7l.8 12.1A1.9 1.9 0 0 0 9.1 21h5.8a1.9 1.9 0 0 0 1.9-1.9L17.6 7"/><path d="M10.4 11v6M13.6 11v6"/>'),
+  nudge: S('<path d="M12 3.5v2.2"/><path d="M5.6 6.4l1.6 1.6"/><path d="M18.4 6.4l-1.6 1.6"/><path d="M3.5 13.4h2.2"/><path d="M18.3 13.4h2.2"/><path d="M17.6 12.1a5.6 5.6 0 1 0-11.2 0c0 4.4-1.5 5.7-1.5 5.7h14.2s-1.5-1.3-1.5-5.7"/><path d="M13.6 20.6a1.9 1.9 0 0 1-3.2 0"/>'),
+  rupee: S('<path d="M7 4.5h10"/><path d="M7 8.6h10"/><path d="M15.5 4.5c0 4.2-2.6 6-6 6h-.3l6.8 8.9"/>'),
+  hands: S('<path d="m3 12 4-4 4 1 2-2 4 1 4 4-4 5-4 3-4-2-6-6Z"/><path d="m11 9-2 2 2 2 3-2 4 4m-10 0 4 4M3 8l-2 4m20-4 2 4"/>'),
+  heart: S('<path d="M12 20s-7.4-4.3-7.4-9.4A4.1 4.1 0 0 1 12 8.2a4.1 4.1 0 0 1 7.4 2.4C19.4 15.7 12 20 12 20Z"/>'),
+  heartFill: F('<path d="M12 21.3 10.6 20C5.4 15.4 2 12.3 2 8.5 2 5.4 4.4 3 7.5 3c1.8 0 3.5.8 4.5 2.2C13 3.8 14.7 3 16.5 3 19.6 3 22 5.4 22 8.5c0 3.8-3.4 6.9-8.6 11.5L12 21.3Z"/>'),
+  backspace: S('<path d="M9 5h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9L2 12l7-7Z"/><path d="m12 9 6 6M18 9l-6 6"/>'),
+  clock: S('<circle cx="12" cy="12" r="8.6"/><path d="M12 7.2V12l3.2 2"/>'),
+  alert: S('<path d="M12 8.4v4.4"/><path d="M12 16.3h.01"/><path d="M10.3 3.9 2.6 17.4A2 2 0 0 0 4.3 20.4h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>'),
+  settings: S('<path d="m9 3-.5 2-2 1-2-.5-2 3 1.5 1.5v3L2.5 15l2 3 2-.5 2 1 .5 2.5h4l.5-2.5 2-1 2 .5 2-3-1.5-2v-3L20 8.5l-2-3-2 .5-2-1-.5-2Z"/><circle cx="11.25" cy="12" r="3"/>'),
+  logout: S('<path d="M9.5 21H5.8A1.8 1.8 0 0 1 4 19.2V4.8A1.8 1.8 0 0 1 5.8 3h3.7"/><path d="M15.5 16.5 20 12l-4.5-4.5"/><path d="M20 12H9.5"/>'),
+  download: S('<path d="M12 3.5v11"/><path d="M7.8 10.5 12 14.7l4.2-4.2"/><path d="M4.5 19.5h15"/>'),
+  sparkle: F('<path d="M12 2.2 13.9 8 19.8 9.9 13.9 11.8 12 17.7 10.1 11.8 4.2 9.9 10.1 8 12 2.2ZM18.6 15.4l.9 2.7 2.7.9-2.7.9-.9 2.7-.9-2.7-2.7-.9 2.7-.9.9-2.7ZM5.4 14.2l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2Z"/>'),
+  crown: F('<path d="M3 7.6 6.9 11 12 4.2 17.1 11 21 7.6l-1.8 10.2a1 1 0 0 1-1 .8H5.8a1 1 0 0 1-1-.8L3 7.6Z"/>'),
+  search: S('<circle cx="11" cy="11" r="6.6"/><path d="M15.8 15.8 20.5 20.5"/>'),
+  filter: S('<path d="M4 6.5h16M7 12h10M10 17.5h4"/>'),
+  calendar: S('<rect x="3.6" y="5.2" width="16.8" height="15.2" rx="2.4"/><path d="M3.6 10h16.8M8.4 3.4v3.4M15.6 3.4v3.4"/>'),
+  wifiOff: S('<path d="M3 3.5 21 21"/><path d="M8.4 15.2a5 5 0 0 1 6.5-.5"/><path d="M5.2 12a9.6 9.6 0 0 1 3.3-2.1"/><path d="M18.8 12a9.7 9.7 0 0 0-2.2-1.7"/><path d="M2.4 8.6a14 14 0 0 1 4.3-2.7"/><path d="M21.6 8.6a14 14 0 0 0-9.9-3"/><path d="M12 19.2h.01"/>'),
+  shield: S('<path d="M12 3.2 5 6v5.6c0 4.3 2.9 7.5 7 9.2 4.1-1.7 7-4.9 7-9.2V6l-7-2.8Z"/><path d="M9.3 12.2 11.4 14.3l3.6-3.8"/>'),
+  users: S('<circle cx="8" cy="9" r="3"/><path d="M2.6 19.4a5.6 5.6 0 0 1 10.8 0"/><path d="M16 6.3a3 3 0 0 1 0 5.6"/><path d="M17.4 14.6a5.6 5.6 0 0 1 4 4.8"/>'),
+  split: S('<path d="M12 21v-7c0-5-7-3-7-8V3m7 11c0-5 7-3 7-8V3M2 6l3-3 3 3m8 0 3-3 3 3"/>'),
+  edit: S('<path d="M16.2 3.9a2.1 2.1 0 0 1 3 3L8.4 17.7l-4 1 1-4L16.2 3.9Z"/>'),
+  lock: S('<rect x="4.6" y="10.4" width="14.8" height="9.8" rx="2.4"/><path d="M8.2 10.4V7.6a3.8 3.8 0 0 1 7.6 0v2.8"/>'),
+  fire: F('<path d="M13.4 2.2c.5 2.6-.6 4.2-1.9 5.6-1.4 1.5-3 3-3 5.6A6.5 6.5 0 0 0 12 21.8a6.5 6.5 0 0 0 6.5-6.5c0-3.6-2.2-5.5-3.3-7.5-.4 1-1 1.7-1.9 2 .4-2.9-.6-5.6-2-7.6Z"/>'),
+  arrowUp: S('<path d="M12 19.5v-15"/><path d="M6 10.5 12 4.5l6 6"/>'),
+  arrowDown: S('<path d="M12 4.5v15"/><path d="M6 13.5l6 6 6-6"/>'),
+  swap: S('<path d="M4 8.5h14l-3.2-3.4"/><path d="M20 15.5H6l3.2 3.4"/>'),
+  info: S('<circle cx="12" cy="12" r="8.8"/><path d="M12 11.2v5"/><path d="M12 8.1h.01"/>'),
+  refresh: S('<path d="M20.4 12a8.4 8.4 0 1 1-2.5-6"/><path d="M20.6 4.4v5h-5"/>'),
+  gift: S('<rect x="3.4" y="9" width="17.2" height="4.4" rx="1.2"/><path d="M5.2 13.4h13.6V20a1.2 1.2 0 0 1-1.2 1.2H6.4A1.2 1.2 0 0 1 5.2 20v-6.6Z"/><path d="M12 9v12.2"/><path d="M12 9S10.8 4 8.4 4a2.2 2.2 0 0 0 0 4.4H12Zm0 0s1.2-5 3.6-5a2.2 2.2 0 0 1 0 4.4H12Z"/>'),
+};
+
+export function icon(name, cls = '') {
+  return `<span class="ic ${cls}" aria-hidden="true">${Icon[name] || ''}</span>`;
+}

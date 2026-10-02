@@ -1,0 +1,107 @@
+{
+  "name": "udhaar \u2014 keep tabs, keep friends",
+  "short_name": "udhaar",
+  "description": "The cab, the split, the 'I'll send it later.' Keep your shared tabs together, without searching the group chat.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "portrait-primary",
+  "background_color": "#F4F1E8",
+  "theme_color": "#F4F1E8",
+  "categories": [
+    "finance",
+    "social",
+    "lifestyle"
+  ],
+  "lang": "en-IN",
+  "dir": "ltr",
+  "shortcuts": [
+    {
+      "name": "Log something",
+      "short_name": "Log",
+      "description": "Write a new line in the ledger",
+      "url": "/#/add",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "My ledger",
+      "short_name": "Ledger",
+      "url": "/#/",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Reliability score",
+      "short_name": "Score",
+      "url": "/#/you",
+      "icons": [
+        {
+          "src": "/icons/icon-512.png",
+          "sizes": "512x512"
+        }
+      ]
+    }
+  ],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screens/home-narrow.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Your ledger, one screen"
+    },
+    {
+      "src": "/og.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Shared tabs, without the chat scroll"
+    }
+  ]
+}

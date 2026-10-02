@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server/index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    { "src": "/api/(.*)",  "dest": "server/index.js" },
+    { "src": "/sw.js",     "dest": "server/index.js" },
+    { "src": "/api/media/(.*)", "dest": "server/index.js" },
+    {
+      "src": "/(.*\\.(js|css|woff2|woff|ttf|png|webp|jpg|jpeg|svg|ico|webmanifest|html))",
+      "dest": "/public/$1"
+    },
+    { "src": "/(.*)", "dest": "/public/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/(.*\\.(js|css|woff2))",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    }
+  ]
+}

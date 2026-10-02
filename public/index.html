@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5">
+  <title>udhaar — keep tabs, keep friends</title>
+
+  <meta name="description" content="The cab, the split, the 'I'll send it later.' Keep shared money, favours and promises in one place, without searching the group chat.">
+  <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#100E0B" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F4F1E8">
+  <meta name="color-scheme" content="light dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="udhaar">
+  <meta name="format-detection" content="telephone=no">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="udhaar">
+  <meta property="og:title" content="udhaar — keep tabs, keep friends">
+  <meta property="og:description" content="For the cab, the split, and every 'I'll send it later.' A shared ledger without the group-chat maths.">
+  <meta property="og:image" content="/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="udhaar — keep tabs, keep friends">
+  <meta name="twitter:description" content="Who paid last time? Keep the answer out of the group-chat scroll.">
+  <meta name="twitter:image" content="/og.png">
+
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="canonical" href="/">
+
+  <link rel="stylesheet" href="/styles/fonts.css">
+
+  <link rel="stylesheet" href="/styles/tokens.css">
+  <link rel="stylesheet" href="/styles/app.css">
+  <link rel="stylesheet" href="/styles/landing.css">
+  <link rel="stylesheet" href="/styles/motion.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "udhaar",
+    "alternateName": "Udhaar — keep tabs, keep friends",
+    "url": "/",
+    "applicationCategory": "FinanceApplication",
+    "operatingSystem": "Any",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
+    "description": "The cab, the split, the I'll send it later. Keep shared money, favours and promises together."
+  }
+  </script>
+
+  <style>
+    /* First-paint shell so the app never flashes white on a mid-range Android. */
+    html { background: #F4F1E8; }
+    @media (prefers-color-scheme: dark) { html { background: #100E0B; } }
+    #boot {
+      position: fixed; inset: 0; display: grid; place-items: center; z-index: 100;
+      background: #F4F1E8;
+      font-family: "Instrument Serif", Georgia, serif;
+    }
+    @media (prefers-color-scheme: dark) { #boot { background: #100E0B; color: #F6F2E7; } }
+    #boot .w { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: clamp(2.4rem, 12vw, 3.2rem); letter-spacing: -0.045em; line-height: 1; animation: bootIn 620ms cubic-bezier(.16,1,.3,1) both; }
+    #boot .w svg { width: 48px; height: 48px; flex: 0 0 auto; }
+    #boot .w i { font-style: normal; color: #C4372A; }
+    #boot p { margin-top: 14px; font-family: system-ui, sans-serif; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; opacity: .45; }
+    @keyframes bootIn { from { opacity: 0; transform: translateY(10px) scale(.97); } }
+    @media (prefers-reduced-motion: reduce) { #boot .w { animation: none; } }
+    .bare-outlet { padding: 0 !important; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to your ledger</a>
+
+  <div id="boot"><div style="text-align:center"><div class="w"><svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect x="2" y="2" width="44" height="44" rx="14" fill="#17150F"/><path d="M14 14v12c0 12 20 12 20 0V14" stroke="#F5F2E9" stroke-width="3.5" stroke-linecap="round"/><path d="M20 14v11c0 3 2 5 4 5" stroke="#F5F2E9" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"/><circle cx="34" cy="13" r="4" fill="#C4372A" stroke="#17150F" stroke-width="2"/></svg><span>udhaar<i>.</i></span></div><p>getting your tabs</p></div></div>
+
+  <div id="app" aria-label="Udhaar"></div>
+
+  <div class="desk-note">
+    <div>
+      <h4>Built for the thumb.</h4>
+      <p>You’re seeing the phone canvas. Resize the window, or open this on a device — the whole product is designed around one-handed use, bottom sheets and four-second logging.</p>
+    </div>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

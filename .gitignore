@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Database & local data
+data/
+*.db
+*.db-shm
+*.db-wal
+uploads/
+
+# Environment — NEVER commit secrets
+.env
+.env.local
+.env.*.local
+
+# Test scratch files
+test-*.mjs
+test-*.js
+auth
+auth-wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel

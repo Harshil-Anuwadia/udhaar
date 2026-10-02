@@ -1,0 +1,78 @@
+/* Identity & motion. Small, finite gestures; never a delay before interaction. */
+.brand-mark { display: block; flex: 0 0 auto; width: 40px; height: 40px; overflow: visible; }
+.brand-lockup { display: inline-flex; align-items: center; gap: 12px; }
+.brand-lockup .brand-mark { width: 48px; height: 48px; }
+.brand-lockup--sm .wordmark { font-size: 28px; }
+.brand-lockup--sm .brand-mark { width: 32px; height: 32px; }
+.brand-mark__stroke { stroke-dasharray: 1; animation: brand-write 800ms var(--ease-out) both; }
+.brand-mark__page { animation: brand-page 650ms var(--ease-out) 100ms both; }
+.brand-mark__dot { transform-box: fill-box; transform-origin: center; animation: brand-dot 500ms var(--ease-spring) 300ms both; }
+.authstep__head .brand-mark { width: 36px; height: 36px; }
+.setup-progress { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.setup-progress .stepper { width: 88px; }
+.brand-header { display: inline-flex; align-items: center; gap: 7px; }
+.brand-header .brand-mark { width: 22px; height: 22px; }
+.brand-header .brand-mark * { animation: none; }
+
+.art-scene { display: block; width: 100%; height: auto; overflow: visible; }
+.art-lift { animation: art-arrive 900ms var(--ease-out) 100ms both; }
+.art-drift { animation: art-arrive 1000ms var(--ease-out) 180ms both; }
+.art-trace { stroke-dasharray: 1; animation: brand-write 950ms var(--ease-out) 200ms both; }
+.art-spark { animation: art-glint 900ms ease-out 250ms both; }
+.chai-steam { animation: chai-steam 2400ms ease-in-out var(--steam-delay, 0ms) infinite; transform-box: fill-box; transform-origin: center bottom; }
+.art-scene--plane .art-lift { animation: art-arrive 900ms var(--ease-out) 100ms both, plane-hover 4200ms ease-in-out 1000ms infinite; }
+.groupcard .splitbar i { transform-origin: left center; animation: split-fill 650ms var(--ease-out) both; }
+.sheet--saved.is-open .saved-moment__inkline { animation: saved-inkline 650ms var(--ease-out) 100ms both; }
+.sheet--saved.is-open .saved-moment__line { animation: saved-line 500ms var(--ease-out) 260ms both; }
+.onboard__art { margin: 0; }
+.onboard__art .art { width: 160px; }
+.empty__art { width: 128px; height: 96px; opacity: 1; }
+.empty__art.empty__art--icon { width: 56px; height: 56px; }
+.empty__art.empty__art--icon svg { width: 36px; height: 36px; }
+.empty__art .art { width: 100%; }
+:root[data-effective="dark"] .empty__art { opacity: 1; }
+.invite__art .art, .twoside__art .art { width: 100%; }
+.demo-indicator { align-self: flex-start; font-size: var(--fs-12); text-transform: none; letter-spacing: 0; }
+
+@keyframes brand-write { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes brand-page { from { opacity: 0; } to { opacity: .8; } }
+@keyframes brand-dot { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes art-arrive { from { translate: 0 8px; opacity: 0; } to { translate: 0 0; opacity: 1; } }
+@keyframes art-glint { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: .65; } }
+@keyframes chai-steam { 0%, 100% { opacity: .38; transform: translateY(2px) translateX(0); } 50% { opacity: .85; transform: translateY(-4px) translateX(2px); } }
+@keyframes plane-hover { 0%, 100% { transform: translate(0, 0) rotate(0); } 50% { transform: translate(3px, -4px) rotate(1deg); } }
+@keyframes split-fill { from { transform: scaleX(.15); } to { transform: scaleX(1); } }
+@keyframes saved-inkline { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes saved-line { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes nav-settle { from { transform: translateY(3px); opacity: .4; } to { transform: translateY(0); opacity: 1; } }
+
+/* Feedback uses composited transforms, not changing dimensions or spacing. */
+.btn, .iconbtn, .quick, .who, .setrow { transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms var(--ease-out); }
+.btn svg, .iconbtn svg, .setrow__icon svg { transition: transform 180ms var(--ease-out); }
+.tab[aria-current="page"] svg { animation: nav-settle 240ms var(--ease-out) both; }
+.input { transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
+.input:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--credit) 12%, transparent); border-color: var(--credit); }
+.amount-entry .input:focus-visible { box-shadow: none; }
+.amount-entry:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--credit) 12%, transparent); border-color: var(--credit); }
+.segmented button, .dirbtn { transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease; }
+.stepper i { transition: background-color 220ms ease; }
+@media (hover: hover) and (pointer: fine) {
+  .btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: var(--e1); }
+  .btn:not(:disabled):hover svg { transform: translateY(-1px); }
+  .iconbtn:hover, .setrow:hover, .account-quick__action:hover, .person:hover, .pick:hover { background-color: var(--surface-2); }
+  .setrow:hover .setrow__icon svg { transform: scale(1.08); }
+  .who:hover { border-color: var(--credit); background: var(--credit-bg); transform: translateY(-2px); }
+  .quick:hover { border-color: var(--ink-3); background: var(--surface); }
+  .avatarbtn:hover .avatarbtn__cam { transform: scale(1.08); }
+}
+.avatarbtn__cam { transition: transform 180ms var(--ease-out); }
+.btn:not(:disabled):active, .who:active, .quick:active { transform: scale(.98); }
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-mark *, .art-scene *, .tab[aria-current="page"] svg, .saved-moment *, .groupcard .splitbar i { animation: none !important; }
+  .brand-mark__stroke, .art-trace { stroke-dashoffset: 0; }
+  .btn, .iconbtn, .quick, .who, .setrow, .input, .amount-entry, .avatarbtn__cam,
+  .btn svg, .iconbtn svg, .setrow__icon svg { transition: none !important; }
+  .btn:hover, .btn:active, .who:hover, .who:active, .quick:active,
+  .btn:hover svg, .setrow:hover svg, .avatarbtn:hover .avatarbtn__cam { transform: none !important; }
+}

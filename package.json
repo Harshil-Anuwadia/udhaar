@@ -1,0 +1,37 @@
+{
+  "name": "udhaar",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test server/*.test.js",
+    "test:layout": "node scripts/layout-regression.mjs",
+    "test:photos": "node scripts/photo-storage.mjs",
+    "test:resilience": "node scripts/ui-resilience.mjs",
+    "test:visual": "node scripts/visual-audit.mjs",
+    "test:motion": "node scripts/motion-audit.mjs",
+    "test:actions": "node scripts/action-visibility.mjs",
+    "start": "node server/start.js",
+    "dev": "node --env-file=.env --watch server/start.js",
+    "dev:local": "node --watch server/start.js",
+    "vercel-build": "echo 'No build step — static assets are pre-built'"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Your friendship ledger",
+  "type": "module",
+  "private": "true",
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.11.1",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/browser-chromium": "^1.63.0",
+    "playwright-core": "^1.63.0"
+  }
+}

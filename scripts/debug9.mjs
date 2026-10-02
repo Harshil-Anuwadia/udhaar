@@ -1,0 +1,21 @@
+import { chromium } from 'playwright-core';
+const b = await chromium.launch({ headless: true, args: ['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'] });
+const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
+const p = await ctx.newPage();
+await p.goto('http://127.0.0.1:4173/');
+await p.waitForSelector('[data-act="demo"]');
+await p.click('[data-act="demo"]');
+await p.waitForSelector('.netcard');
+await p.waitForTimeout(800);
+const info = await p.evaluate(async () => {
+  const { state } = await import('/js/core/store.js');
+  const u = state.user;
+  const friendLink = document.querySelector('.person')?.getAttribute('href') || document.querySelector('.person a')?.getAttribute('href');
+  return { currency: u?.currency, onboarded: u?.onboarded, friendLink };
+});
+console.log(JSON.stringify(info));
+await p.click('.person');
+await p.waitForSelector('.swipe');
+const amt = await p.evaluate(() => document.querySelector('.swipe .num, .swipe__content .num')?.textContent);
+console.log('entry amount:', amt);
+await b.close();
