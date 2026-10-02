@@ -13,15 +13,24 @@ import { confetti } from '../ui/confetti.js';
 import { openInvite } from './home.js';
 
 export async function viewYou({ outlet }) {
-  mount(outlet, 'app', () => `<div class="profile-head"><div class="skeleton" style="width:96px;height:96px;border-radius:50%"></div></div><div class="card skeleton" style="height:200px"></div>`);
   setHeader({ title: 'Account' });
   showFab(false);
 
+  // Paint instantly from cached state if we have it — no skeleton flash
+  const cachedStats = state.stats;
+  if (cachedStats) {
+    mount(outlet, 'app', () => youHTML(state.user, cachedStats, null, { links: [], used: 0 }), (main) => bindYou(main, cachedStats, null, { links: [], used: 0 }));
+  } else {
+    mount(outlet, 'app', () => `<div class="profile-head"><div class="skeleton" style="width:96px;height:96px;border-radius:50%"></div></div><div class="card skeleton" style="height:200px"></div>`);
+  }
+
+  // Fetch fresh data — all 3 in parallel
   const [stats, card, invites] = await Promise.all([
     api.stats(), api.card().catch(() => null), api.invites().catch(() => ({ links: [], used: 0 })),
   ]);
   setState({ stats });
 
+  // Only re-render if data actually changed or we showed a skeleton
   mount(outlet, 'app', () => youHTML(state.user, stats, card, invites), (main) => bindYou(main, stats, card, invites));
 }
 

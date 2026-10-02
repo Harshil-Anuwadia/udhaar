@@ -19,7 +19,6 @@ import { homeVerdict } from '../core/voice.js';
 const KIND_ICON = { money: 'rupee', favor: 'hands', gesture: 'heart' };
 
 export async function viewHome({ outlet }) {
-  mount(outlet, 'app', skeletonHTML);
   setHeader({
     title: `<span class="brand-header">${BrandMark()}<span>udhaar<span style="color:var(--due)">.</span></span></span>`,
     actions: [
@@ -29,6 +28,16 @@ export async function viewHome({ outlet }) {
   });
   showFab(true);
 
+  // Instant paint from cache — zero skeleton flash on revisit
+  const cachedFriends = state.friends;
+  const cachedStats = state.stats;
+  if (cachedFriends?.length && cachedStats) {
+    mount(outlet, 'app', () => homeHTML({ friends: cachedFriends }, cachedStats), (el) => bindHome(el, { friends: cachedFriends }, cachedStats));
+  } else {
+    mount(outlet, 'app', skeletonHTML);
+  }
+
+  // Fetch fresh data in background
   const [friendsRes, statsRes] = await Promise.all([api.friends(), api.stats()]);
   setState({ friends: friendsRes.friends, stats: statsRes });
 

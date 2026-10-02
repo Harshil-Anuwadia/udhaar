@@ -141,9 +141,11 @@ function softRefresh() {
       setState({ friends: friendsRes.friends, stats: statsRes });
       setCurrency(state.user.currency);
       saveCache();
-      if (path === '/' || path === '/groups' || path === '/you') render();
+      // /you has its own 3-API fetch on mount — re-rendering it via softRefresh
+      // causes the double-flash the user sees. Only re-render data-driven list pages.
+      if (path === '/' || path === '/groups') render();
     } catch {}
-  }, 120);
+  }, 600); // debounce — prevent rapid consecutive re-renders
 }
 
 async function pollUnread() {
@@ -219,8 +221,11 @@ function wireLifecycle() {
     if (pendingCount() > 0) { e.preventDefault(); e.returnValue = ''; }
   });
 
+  let lastVisible = Date.now();
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && state.user) softRefresh();
+    if (document.visibilityState === 'hidden') { lastVisible = Date.now(); return; }
+    // Only refresh if user was away for more than 2 minutes — not just switching tabs
+    if (state.user && Date.now() - lastVisible > 2 * 60_000) softRefresh();
   });
 }
 
