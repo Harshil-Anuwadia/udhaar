@@ -8,11 +8,14 @@ import { navigate, currentPath, navDir } from '../core/router.js';
 const mounters = new Map();
 let chromeBuilt = false;
 
+let activeScreenPath = null;
+export function resetActiveScreen() { activeScreenPath = null; }
+
 /**
  * @param {string} mode 'app' renders inside the chrome; 'bare' renders full-screen (auth/onboarding).
  * Each render gets a FRESH screen node so delegated listeners never stack up.
  */
-export function mount(outlet, mode, renderFn, bindFn) {
+export function mount(outlet, mode, renderFn, bindFn, { animate } = {}) {
   if (mode === 'bare') {
     hideChrome();
     $('#app')?.classList.add('is-bare');
@@ -22,8 +25,6 @@ export function mount(outlet, mode, renderFn, bindFn) {
     screen.innerHTML = renderFn();
     bare.replaceChildren(screen);
     bare.classList.remove('hide');
-    // In-place auth/setup steps are new pages too. Do not carry the previous
-    // step's document scroll into a shorter or differently structured form.
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     mounters.set('current', bindFn);
     bindFn?.(screen);
@@ -35,8 +36,13 @@ export function mount(outlet, mode, renderFn, bindFn) {
   $('#bare')?.classList.add('hide');
   const main = $('#main');
   main.classList.remove('main--flush');
+
+  const path = currentPath();
+  const shouldAnimate = animate !== undefined ? animate : (activeScreenPath !== path);
+  activeScreenPath = path;
+
   const screen = document.createElement('div');
-  screen.className = `screen screen--${navDir()}`;
+  screen.className = shouldAnimate ? `screen screen--${navDir()}` : 'screen';
   screen.innerHTML = renderFn();
   main.replaceChildren(screen);
   mounters.set('current', bindFn);

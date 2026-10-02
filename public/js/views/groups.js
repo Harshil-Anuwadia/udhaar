@@ -21,7 +21,9 @@ export async function viewGroups({ outlet }) {
   // Instant paint from cache
   const cachedGroups = state.groups;
   const cachedFriends = state.friends;
-  if (cachedGroups && cachedFriends) {
+  const hadCache = !!(cachedGroups && cachedFriends);
+
+  if (hadCache) {
     mount(outlet, 'app', () => groupsHTML(cachedGroups, cachedFriends), (main) => bindGroups(main, cachedGroups, cachedFriends));
   } else {
     mount(outlet, 'app', () => `<div class="card skeleton" style="height:120px"></div><div class="card skeleton" style="height:120px"></div>`);
@@ -30,7 +32,13 @@ export async function viewGroups({ outlet }) {
   const [groupsRes, friendsRes] = await Promise.all([api.groups(), api.friends()]);
   setState({ groups: groupsRes.groups, friends: friendsRes.friends });
 
-  mount(outlet, 'app', () => groupsHTML(groupsRes.groups, friendsRes.friends), (main) => bindGroups(main, groupsRes.groups, friendsRes.friends));
+  const changed = !hadCache ||
+    JSON.stringify(groupsRes.groups) !== JSON.stringify(cachedGroups) ||
+    JSON.stringify(friendsRes.friends) !== JSON.stringify(cachedFriends);
+
+  if (changed) {
+    mount(outlet, 'app', () => groupsHTML(groupsRes.groups, friendsRes.friends), (main) => bindGroups(main, groupsRes.groups, friendsRes.friends), { animate: !hadCache });
+  }
 }
 
 function groupsHTML(groups, friends) {

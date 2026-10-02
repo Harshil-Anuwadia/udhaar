@@ -18,7 +18,8 @@ export async function viewYou({ outlet }) {
 
   // Paint instantly from cached state if we have it — no skeleton flash
   const cachedStats = state.stats;
-  if (cachedStats) {
+  const hadCache = !!cachedStats;
+  if (hadCache) {
     mount(outlet, 'app', () => youHTML(state.user, cachedStats, null, { links: [], used: 0 }), (main) => bindYou(main, cachedStats, null, { links: [], used: 0 }));
   } else {
     mount(outlet, 'app', () => `<div class="profile-head"><div class="skeleton" style="width:96px;height:96px;border-radius:50%"></div></div><div class="card skeleton" style="height:200px"></div>`);
@@ -30,8 +31,14 @@ export async function viewYou({ outlet }) {
   ]);
   setState({ stats });
 
-  // Only re-render if data actually changed or we showed a skeleton
-  mount(outlet, 'app', () => youHTML(state.user, stats, card, invites), (main) => bindYou(main, stats, card, invites));
+  const changed = !hadCache ||
+    JSON.stringify(stats?.totals) !== JSON.stringify(cachedStats?.totals) ||
+    card !== null ||
+    invites.used > 0;
+
+  if (changed) {
+    mount(outlet, 'app', () => youHTML(state.user, stats, card, invites), (main) => bindYou(main, stats, card, invites), { animate: !hadCache });
+  }
 }
 
 function youHTML(u, stats, card, invites) {

@@ -134,18 +134,14 @@ let refreshTimer = null;
 function softRefresh() {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(async () => {
-    const path = currentPath();
     if (!state.user) return;
     try {
       const [friendsRes, statsRes] = await Promise.all([api.friends(), api.stats()]);
       setState({ friends: friendsRes.friends, stats: statsRes });
       setCurrency(state.user.currency);
       saveCache();
-      // /you has its own 3-API fetch on mount — re-rendering it via softRefresh
-      // causes the double-flash the user sees. Only re-render data-driven list pages.
-      if (path === '/' || path === '/groups') render();
     } catch {}
-  }, 600); // debounce — prevent rapid consecutive re-renders
+  }, 800);
 }
 
 async function pollUnread() {

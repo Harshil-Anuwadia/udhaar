@@ -31,7 +31,9 @@ export async function viewHome({ outlet }) {
   // Instant paint from cache — zero skeleton flash on revisit
   const cachedFriends = state.friends;
   const cachedStats = state.stats;
-  if (cachedFriends?.length && cachedStats) {
+  const hadCache = !!(cachedFriends?.length && cachedStats);
+
+  if (hadCache) {
     mount(outlet, 'app', () => homeHTML({ friends: cachedFriends }, cachedStats), (el) => bindHome(el, { friends: cachedFriends }, cachedStats));
   } else {
     mount(outlet, 'app', skeletonHTML);
@@ -41,9 +43,15 @@ export async function viewHome({ outlet }) {
   const [friendsRes, statsRes] = await Promise.all([api.friends(), api.stats()]);
   setState({ friends: friendsRes.friends, stats: statsRes });
 
-  const main = mount(outlet, 'app', () => homeHTML(friendsRes, statsRes), (el) => bindHome(el, friendsRes, statsRes));
+  const changed = !hadCache ||
+    JSON.stringify(friendsRes.friends) !== JSON.stringify(cachedFriends) ||
+    JSON.stringify(statsRes.totals) !== JSON.stringify(cachedStats?.totals);
+
+  if (changed) {
+    mount(outlet, 'app', () => homeHTML(friendsRes, statsRes), (el) => bindHome(el, friendsRes, statsRes), { animate: !hadCache });
+  }
   bus.emit('loaded:home');
-  return main;
+  return $('#main')?.firstElementChild;
 }
 
 /* --------------------------------- render -------------------------------- */

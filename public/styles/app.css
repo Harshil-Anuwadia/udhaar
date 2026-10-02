@@ -130,6 +130,13 @@ main.no-nav { padding-bottom: var(--s8); }
   .screen--push, .screen--back, .screen--tab { animation: none; }
 }
 
+/* In-place view updates must never flash or re-animate from opacity 0 */
+.screen:not(.screen--push):not(.screen--back):not(.screen--tab) .anim-rise {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
 .section-head {
   display: flex; align-items: baseline; justify-content: space-between;
   gap: var(--s3); margin-bottom: var(--s2);

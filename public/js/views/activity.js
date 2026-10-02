@@ -24,7 +24,8 @@ export async function viewActivity({ outlet }) {
 
   // Instant paint from cache
   const cachedEvents = state.events;
-  if (cachedEvents) {
+  const hadCache = !!cachedEvents;
+  if (hadCache) {
     mount(outlet, 'app', () => activityHTML(cachedEvents, [], cachedEvents.length > 0), (main) => bind(main, cachedEvents, []));
   } else {
     mount(outlet, 'app', () => `<div class="card skeleton" style="height:80px"></div><div class="card skeleton" style="height:80px"></div>`);
@@ -45,8 +46,14 @@ export async function viewActivity({ outlet }) {
     toastError(e.message);
   }
 
-  const hasContent = events.length || incoming.length;
-  mount(outlet, 'app', () => activityHTML(events, incoming, hasContent), (main) => bind(main, events, incoming));
+  const changed = !hadCache ||
+    JSON.stringify(events) !== JSON.stringify(cachedEvents) ||
+    incoming.length > 0;
+
+  if (changed) {
+    const hasContent = events.length || incoming.length;
+    mount(outlet, 'app', () => activityHTML(events, incoming, hasContent), (main) => bind(main, events, incoming), { animate: !hadCache });
+  }
 }
 
 function activityHTML(events, incoming, hasContent) {
