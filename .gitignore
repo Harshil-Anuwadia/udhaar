@@ -25,3 +25,13 @@ Thumbs.db
 
 # Vercel
 .vercel
+
+# Dev screenshots & audit shots (not needed for deployment)
+shots/
+public/screens/
+
+# NOTE: The following are intentionally tracked (needed for the app):
+#   public/fonts/    — self-hosted fonts (woff2)
+#   public/icons/    — favicons and PWA icons
+#   public/art/      — background texture images
+#   public/og.png    — social share image
