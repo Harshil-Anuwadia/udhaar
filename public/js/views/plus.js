@@ -118,7 +118,15 @@ function bind(main) {
       btn.disabled = true;
       btn.innerHTML = '<span class="btn__spinner"></span> Connecting...';
       try {
-        if (!window.Razorpay) throw new Error('Payment gateway is loading. Please try again in a moment.');
+        if (!window.Razorpay) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('Failed to load payment gateway. Check your connection.'));
+            document.head.appendChild(script);
+          });
+        }
         const order = await api.post('/api/me/create-order');
         
         const options = {
