@@ -9,7 +9,7 @@ import { navigate } from '../core/router.js';
 import { toastError } from '../ui/toast.js';
 import { Sheet, confirmSheet } from '../ui/sheet.js';
 
-const PRICE_IN = { lifetime: 29 };
+const PRICE_IN = { lifetime: 49 };
 const PRICE_OTHER = { lifetime: 1 };
 
 const FEATURES = [

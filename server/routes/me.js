@@ -55,7 +55,7 @@ r.post('/create-order', rateLimit({ windowMs: 60_000, max: 10, key: 'order' }), 
     return res.status(500).json({ error: 'config_missing', message: 'Payment gateway is not configured.' });
   }
   const cur = req.user.currency;
-  const price = cur === 'INR' ? 29 : 1; // Lifetime pricing
+  const price = cur === 'INR' ? 49 : 1; // Lifetime pricing
   const amountPaise = price * 100;
   
   if (amountPaise < 100) return res.status(400).json({ error: 'invalid_amount', message: 'Amount too small' });
