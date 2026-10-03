@@ -120,10 +120,13 @@ function bind(main) {
       try {
         if (!window.Razorpay) {
           await new Promise((resolve, reject) => {
+            const existing = document.querySelector('script[src*="checkout.razorpay.com"]');
+            if (existing) existing.remove();
             const script = document.createElement('script');
             script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.async = true;
             script.onload = resolve;
-            script.onerror = () => reject(new Error('Failed to load payment gateway. Check your connection.'));
+            script.onerror = () => reject(new Error('Failed to load payment gateway. Check your connection or ad blocker.'));
             document.head.appendChild(script);
           });
         }

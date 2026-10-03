@@ -33,16 +33,17 @@ app.use((req, res, next) => {
   if (!req.path.startsWith('/api')) {
     res.set('Content-Security-Policy', [
       "default-src 'self'",
-      "script-src 'self'",
+      "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "img-src 'self' data: blob:",
+      "img-src 'self' data: blob: https://*.razorpay.com",
       "font-src 'self' data:",
-      "connect-src 'self'",
+      "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://lumberjack-cx.razorpay.com",
+      "frame-src 'self' https://api.razorpay.com",
       "manifest-src 'self'",
       "worker-src 'self'",
       "frame-ancestors 'none'",
       "base-uri 'self'",
-      "form-action 'self'",
+      "form-action 'self' https://api.razorpay.com",
     ].join('; '));
   }
   next();
