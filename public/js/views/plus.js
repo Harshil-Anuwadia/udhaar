@@ -18,10 +18,28 @@ const FEATURES = [
   { t: 'Unlimited groups', d: 'More than the two groups included with free.' },
 ];
 
+let _rzpLoader = null;
+function preloadRazorpay() {
+  if (window.Razorpay) return Promise.resolve();
+  if (_rzpLoader) return _rzpLoader;
+  _rzpLoader = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () => { _rzpLoader = null; reject(new Error('Payment gateway unavailable. Check your connection or disable your ad blocker.')); };
+    document.head.appendChild(script);
+  });
+  return _rzpLoader;
+}
+
 export async function viewPlus({ outlet, isCurrent = () => true }) {
   mount(outlet, 'app', () => `<div class="card skeleton" style="height:220px"></div><div class="card skeleton" style="height:300px"></div>`);
   setHeader({ title: 'Udhaar Plus', back: true });
   showFab(false);
+
+  // Preload Razorpay in the background as soon as page opens
+  preloadRazorpay().catch(() => {});
 
   const stats = state.stats || await api.stats().catch(() => null);
   if (!isCurrent()) return;
@@ -118,18 +136,7 @@ function bind(main) {
       btn.disabled = true;
       btn.innerHTML = '<span class="btn__spinner"></span> Connecting...';
       try {
-        if (!window.Razorpay) {
-          await new Promise((resolve, reject) => {
-            const existing = document.querySelector('script[src*="checkout.razorpay.com"]');
-            if (existing) existing.remove();
-            const script = document.createElement('script');
-            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-            script.async = true;
-            script.onload = resolve;
-            script.onerror = () => reject(new Error('Failed to load payment gateway. Check your connection or ad blocker.'));
-            document.head.appendChild(script);
-          });
-        }
+        await preloadRazorpay();
         const order = await api.post('/api/me/create-order');
         
         const options = {
