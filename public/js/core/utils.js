@@ -5,7 +5,7 @@ export const CURRENCY = {
   USD: { symbol: '$', locale: 'en-US', name: 'US Dollar' },
   GBP: { symbol: '£', locale: 'en-GB', name: 'Pound' },
   EUR: { symbol: '€', locale: 'de-DE', name: 'Euro' },
-  AED: { symbol: 'AED', locale: 'en-AE', name: 'Dirham' },
+  AED: { symbol: 'د.إ', locale: 'en-AE', name: 'UAE Dirham' },
   SGD: { symbol: 'S$', locale: 'en-SG', name: 'Singapore Dollar' },
   AUD: { symbol: 'A$', locale: 'en-AU', name: 'Australian Dollar' },
   CAD: { symbol: 'C$', locale: 'en-CA', name: 'Canadian Dollar' },
@@ -16,25 +16,46 @@ export const setCurrency = (c) => { CUR = CURRENCY[c] ? c : 'INR'; };
 export const currencyCode = () => CUR;
 export const symbol = (c = CUR) => (CURRENCY[c] || CURRENCY.INR).symbol;
 
-/** 4500 -> "4,500" using the active locale; never shows paise. */
+/** Currency amounts use whole units until a conversion creates cents. */
 export function money(amount, code = CUR) {
   const c = CURRENCY[code] || CURRENCY.INR;
-  const n = Math.round(Number(amount) || 0);
+  const n = Number(amount) || 0;
   try {
-    return new Intl.NumberFormat(c.locale, { maximumFractionDigits: 0 }).format(Math.abs(n));
+    return new Intl.NumberFormat(c.locale, { maximumFractionDigits: 2 }).format(Math.abs(n));
   } catch {
-    return String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return String(Math.abs(n));
   }
 }
 
 export function withSymbol(amount, code = CUR) {
-  const n = Math.round(Number(amount) || 0);
+  const n = Number(amount) || 0;
   return `${n < 0 ? '−' : ''}${symbol(code)}${money(Math.abs(n), code)}`;
+}
+
+/** A display-only grouped integer for live amount fields. Model values stay digits. */
+export function formatMoneyInput(value, code = CUR) {
+  const digits = String(value ?? '').replace(/\D/g, '').slice(0, 9);
+  return digits ? money(Number(digits), code) : '';
+}
+
+export function applyMoneyInput(input, code = CUR) {
+  const before = input.value.slice(0, input.selectionStart ?? input.value.length).replace(/\D/g, '').length;
+  const digits = input.value.replace(/\D/g, '').slice(0, 9);
+  const normalized = digits ? String(Number(digits)) : '';
+  input.value = formatMoneyInput(normalized, code);
+  let position = 0;
+  let seen = 0;
+  while (position < input.value.length && seen < before) {
+    if (/\d/.test(input.value[position])) seen += 1;
+    position += 1;
+  }
+  input.setSelectionRange(position, position);
+  return normalized;
 }
 
 /** Spoken-language magnitude for big numbers: 1.2L, 3.4Cr, 12K */
 export function shortMoney(amount, code = CUR) {
-  const n = Math.abs(Math.round(Number(amount) || 0));
+  const n = Math.abs(Number(amount) || 0);
   const s = symbol(code);
   if (code === 'INR') {
     if (n >= 1e7) return `${s}${(n / 1e7).toFixed(n >= 1e8 ? 0 : 1)}Cr`;
@@ -42,7 +63,7 @@ export function shortMoney(amount, code = CUR) {
   }
   if (n >= 1e6) return `${s}${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3) return `${s}${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}K`;
-  return `${s}${n}`;
+  return `${s}${money(n, code)}`;
 }
 
 const DAY = 86400000;
@@ -150,17 +171,13 @@ export async function share(data) {
 /* -------------------------------- avatars -------------------------------- */
 
 const PALETTES = [
-  ['#8A5A44', '#6B4331'], ['#5B6B8C', '#414F6B'], ['#6E7B52', '#50593B'],
-  ['#8C6E3F', '#68512C'], ['#7A5A80', '#59405E'], ['#4E7676', '#37575A'],
-  ['#96564A', '#6F3D34'], ['#5F6E4E', '#46523A'], ['#8A4F63', '#63384A'],
-  ['#4A5F8C', '#344566'], ['#7A6248', '#594734'], ['#565A8C', '#3E4166'],
+  '#80614A', '#536482', '#63724E', '#806A47', '#795F79', '#4F7372',
+  '#916157', '#626E53', '#85596A', '#52678B', '#78624E', '#5B6083',
 ];
 
 export function avatarStyle(seed = 0) {
   const n = Math.abs(Number(seed) || 0);
-  const [a, b] = PALETTES[n % PALETTES.length];
-  const angle = (n % 7) * 47 + 20;
-  return `background:linear-gradient(${angle}deg,${a},${b})`;
+  return `background:${PALETTES[n % PALETTES.length]}`;
 }
 
 export function initials(name = '?') {

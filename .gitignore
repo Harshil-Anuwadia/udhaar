@@ -36,3 +36,4 @@ public/screens/
 #   public/icons/    — favicons and PWA icons
 #   public/art/      — background texture images
 #   public/og.png    — social share image
+.env*

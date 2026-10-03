@@ -51,8 +51,26 @@ try {
   await page.locator('#su-pass').fill('246810');
   await page.locator('[data-go]').click();
   await page.waitForSelector('#curGrid', { timeout: 20_000 });
+  const currencyLayout = await page.locator('.onboard').evaluate((screen) => {
+    const grid = screen.querySelector('.currency-grid').getBoundingClientRect();
+    const action = screen.querySelector('.onboard__actions').getBoundingClientRect();
+    return { gridBottom: grid.bottom, actionTop: action.top, actionBottom: action.bottom, viewportHeight: innerHeight };
+  });
+  assert.ok(currencyLayout.gridBottom <= currencyLayout.actionTop, `currency choices must not run under Continue: ${JSON.stringify(currencyLayout)}`);
+  assert.ok(currencyLayout.actionBottom <= currencyLayout.viewportHeight + 1, `Continue must be visible on a short phone: ${JSON.stringify(currencyLayout)}`);
+  await page.locator('[data-cur="USD"]').click();
   await page.locator('[data-act="next"]').click();
   await page.waitForSelector('#ob-sugg');
+  assert.equal(await page.locator('#ob-sugg .pick').count(), 3, 'person setup offers three person suggestions, not a group');
+  assert.equal(await page.locator('#ob-sugg').getByText('The group trip').count(), 0);
+  const personLayout = await page.locator('.onboard').evaluate((screen) => ({
+    suggestionsBottom: screen.querySelector('#ob-sugg').getBoundingClientRect().bottom,
+    actionTop: screen.querySelector('.onboard__actions').getBoundingClientRect().top,
+    actionBottom: screen.querySelector('.onboard__actions').getBoundingClientRect().bottom,
+    viewportHeight: innerHeight,
+  }));
+  assert.ok(personLayout.suggestionsBottom <= personLayout.actionTop, `person suggestions must not run under actions: ${JSON.stringify(personLayout)}`);
+  assert.ok(personLayout.actionBottom <= personLayout.viewportHeight + 1, `person actions must be visible on a short phone: ${JSON.stringify(personLayout)}`);
 
   const suggestions = await page.locator('#ob-sugg .pick').evaluateAll((rows) => rows.map((row) => {
     const rect = row.getBoundingClientRect();
@@ -69,6 +87,14 @@ try {
   await page.locator('#ob-name').fill('A person with an intentionally long name');
   await page.getByRole('button', { name: 'Add them' }).click();
   await page.waitForSelector('[data-act="skip"]');
+  const firstLineLayout = await page.locator('.onboard').evaluate((screen) => ({
+    choicesBottom: screen.querySelector('#ob-quick').getBoundingClientRect().bottom,
+    actionTop: screen.querySelector('.onboard__actions').getBoundingClientRect().top,
+    actionBottom: screen.querySelector('.onboard__actions').getBoundingClientRect().bottom,
+    viewportHeight: innerHeight,
+  }));
+  assert.ok(firstLineLayout.choicesBottom <= firstLineLayout.actionTop, `first-line choices must not run under actions: ${JSON.stringify(firstLineLayout)}`);
+  assert.ok(firstLineLayout.actionBottom <= firstLineLayout.viewportHeight + 1, `first-line actions must be visible on a short phone: ${JSON.stringify(firstLineLayout)}`);
   await page.getByRole('button', { name: 'I’ll log it later' }).click();
   await page.waitForSelector('.netcard', { timeout: 20_000 });
   await page.locator('#tabAdd').click();

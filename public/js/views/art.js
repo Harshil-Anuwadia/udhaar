@@ -5,11 +5,11 @@ export { BrandMark };
 export const LandingPreview = () => `
   <div class="landing-preview" aria-hidden="true">
     <div class="landing-preview__top">
-      <span class="landing-preview__brand"><b>Your ledger</b></span>
-      <span class="landing-preview__status">Overview</span>
+      <span class="landing-preview__brand"><b>Example book</b></span>
+      <span class="landing-preview__status">Sample lines</span>
     </div>
     <div class="landing-preview__balance">
-      <span>Net position</span>
+      <span>Money still open</span>
       <strong>₹610</strong>
       <small>Across two people</small>
     </div>

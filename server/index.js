@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { now } from './db.js';
-import { rateLimit } from './auth.js';
-import { readMedia } from './photos.js';
+import { rateLimit, requireAuth } from './auth.js';
+import { readAuthorizedMedia } from './photos.js';
 
 import authRoutes from './routes/auth.js';
 import friendRoutes from './routes/friends.js';
@@ -48,7 +48,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '4mb' })); // photo data-urls ride on JSON
+app.use(express.json({ limit: '18mb' })); // Up to four downscaled photo data URLs ride on JSON.
 app.use(cookieParser());
 
 // Reject malformed JSON with a friendly 400 rather than an HTML stack trace.
@@ -68,10 +68,12 @@ api.get('/health', (req, res) => {
   res.json({ ok: true, uptime: process.uptime(), time: now() });
 });
 
-api.get('/media/:id', async (req, res) => {
-  const media = await readMedia(req.params.id);
+api.get('/media/:id', (req, res, next) => {
+  res.set({ 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' });
+  next();
+}, requireAuth, async (req, res) => {
+  const media = await readAuthorizedMedia(req.params.id, req.user.id);
   if (!media) return res.status(404).json({ error: 'not_found', message: 'Image not found.' });
-  res.set({ 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
   res.type(media.contentType).send(Buffer.from(media.data));
 });
 
@@ -91,7 +93,7 @@ let BUILD_TAG = '';
 try {
   BUILD_TAG = fs.readFileSync(path.join(ROOT, 'build-tag.txt'), 'utf8').trim();
 } catch {}
-const CACHE_TAG = process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || process.env.CACHE_TAG || BUILD_TAG || 'v1.14.2';
+const CACHE_TAG = process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA || process.env.CACHE_TAG || BUILD_TAG || 'v1.14.4';
 
 app.get('/sw.js', (req, res) => {
   res.set({

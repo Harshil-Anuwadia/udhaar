@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+import Razorpay from 'razorpay';
 import { Router } from 'express';
 import { db, newId, now } from '../db.js';
 import { saveDataUrl, unlinkUrl } from '../photos.js';
@@ -6,6 +8,7 @@ import { ProfileSchema, validate , PhotoSchema } from '../validate.js';
 import { computeHonor, totalsFor, friendsFor, insight, syncHonor } from '../ledger.js';
 import { publicUser } from './auth.js';
 import { inviteTokenFor } from './friends.js';
+import { convertAmount, distributeConverted, latestRate } from '../fx.js';
 
 const r = Router();
 r.use(requireAuth, rateLimit({ windowMs: 60_000, max: 240, key: 'api' }));
@@ -21,7 +24,7 @@ r.get('/stats', async (req, res) => {
     .get(req.user.id), insight(req.user.id),
   ]);
   const top = [...friends]
-    .filter((f) => f.net !== 0 || f.openCount > 0)
+    .filter((f) => f.net !== 0 || f.openCount > 0 || f.disputedCount > 0)
     .sort((a, b) => Math.abs(b.net) - Math.abs(a.net))
     .slice(0, 6);
 
@@ -31,11 +34,128 @@ r.get('/stats', async (req, res) => {
 /* ------------------------------- profile -------------------------------- */
 
 r.patch('/profile', validate(ProfileSchema), async (req, res) => {
-  const { name, currency, theme, plan } = req.valid;
-  await db.prepare(`UPDATE users SET name = COALESCE(?,name), currency = COALESCE(?,currency), theme = COALESCE(?,theme), plan = COALESCE(?,plan) WHERE id = ?`)
-    .run(name ?? null, currency ?? null, theme ?? null, plan ?? null, req.user.id);
+  const { name, currency, theme, voiceMode, plan } = req.valid;
+  if (currency && currency !== req.user.currency) {
+    const [entries, groups] = await Promise.all([
+      db.prepare('SELECT COUNT(*) AS n FROM entries WHERE owner_id = ?').get(req.user.id),
+      db.prepare('SELECT COUNT(*) AS n FROM groups WHERE owner_id = ?').get(req.user.id),
+    ]);
+    if (req.user.onboarded || entries.n || groups.n) return res.status(409).json({ error: 'currency_conversion_required', message: 'Use the currency conversion flow to change your ledger currency.' });
+  }
+  await db.prepare(`UPDATE users SET name = COALESCE(?,name), currency = COALESCE(?,currency), theme = COALESCE(?,theme), voice_mode = COALESCE(?,voice_mode), plan = COALESCE(?,plan) WHERE id = ?`)
+    .run(name ?? null, currency ?? null, theme ?? null, voiceMode ?? null, plan ?? null, req.user.id);
   const fresh = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.user.id);
   res.json({ user: await publicUser(fresh) });
+});
+
+/* ------------------------------- razorpay ------------------------------- */
+
+r.post('/create-order', rateLimit({ windowMs: 60_000, max: 10, key: 'order' }), async (req, res) => {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    return res.status(500).json({ error: 'config_missing', message: 'Payment gateway is not configured.' });
+  }
+  const cur = req.user.currency;
+  const price = cur === 'INR' ? 29 : 1; // Lifetime pricing
+  const amountPaise = price * 100;
+  
+  if (amountPaise < 100) return res.status(400).json({ error: 'invalid_amount', message: 'Amount too small' });
+
+  try {
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+    const order = await razorpay.orders.create({
+      amount: amountPaise,
+      currency: cur,
+      receipt: `rcpt_${req.user.id}_${Date.now()}`
+    });
+    res.json({
+      order_id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      key_id: process.env.RAZORPAY_KEY_ID,
+    });
+  } catch (error) {
+    console.error('Razorpay Create Order Error:', error);
+    res.status(500).json({ error: 'order_failed', message: 'Failed to create payment order.' });
+  }
+});
+
+r.post('/verify-payment', rateLimit({ windowMs: 60_000, max: 10, key: 'verify' }), async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    return res.status(400).json({ error: 'missing_fields', message: 'Missing payment signature details' });
+  }
+  
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .update(razorpay_order_id + '|' + razorpay_payment_id)
+    .digest('hex');
+    
+  if (expectedSignature !== razorpay_signature) {
+    return res.status(400).json({ error: 'invalid_signature', message: 'Payment verification failed' });
+  }
+  
+  try {
+    await db.prepare(`UPDATE users SET plan = 'plus' WHERE id = ?`).run(req.user.id);
+    const fresh = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.user.id);
+    res.json({ success: true, user: await publicUser(fresh) });
+  } catch (err) {
+    res.status(500).json({ error: 'db_error', message: 'Payment verified but failed to update plan.' });
+  }
+});
+
+r.get('/currency/quote', async (req, res) => {
+  try {
+    const quote = await latestRate(req.user.currency, String(req.query.to || ''));
+    const [lines, groups, linked] = await Promise.all([
+      db.prepare("SELECT COUNT(*) AS n FROM entries WHERE owner_id = ? AND kind = 'money'").get(req.user.id),
+      db.prepare('SELECT COUNT(*) AS n FROM groups WHERE owner_id = ?').get(req.user.id),
+      db.prepare("SELECT COUNT(*) AS n FROM entries e JOIN friendships f ON f.id = e.friendship_id WHERE e.owner_id = ? AND e.kind = 'money' AND f.user_id IS NOT NULL").get(req.user.id),
+    ]);
+    res.json({ ...quote, lines: lines.n, groups: groups.n, linkedLines: linked.n });
+  } catch (error) { res.status(503).json({ error: 'rate_unavailable', message: error.message }); }
+});
+
+r.post('/currency/change', rateLimit({ windowMs: 3600_000, max: 12, key: 'currency' }), async (req, res) => {
+  const to = String(req.body?.to || '');
+  let quote;
+  try { quote = await latestRate(req.user.currency, to); }
+  catch (error) { return res.status(503).json({ error: 'rate_unavailable', message: error.message }); }
+  if (req.body?.date !== quote.date || req.body?.rate !== quote.rate) {
+    return res.status(409).json({ error: 'rate_changed', message: 'The reference rate changed. Reopen Currency to review the new rate before converting.' });
+  }
+  try {
+    await db.transaction(async (tx) => {
+      const user = await tx.prepare('SELECT currency FROM users WHERE id = ?').get(req.user.id);
+      if (user?.currency !== quote.from) throw new Error('Currency changed elsewhere. Refresh and try again.');
+      const linked = await tx.prepare("SELECT COUNT(*) AS n FROM entries e JOIN friendships f ON f.id = e.friendship_id WHERE e.owner_id = ? AND e.kind = 'money' AND f.user_id IS NOT NULL").get(req.user.id);
+      if (linked.n) throw new Error('Linked people share your money lines. Currency conversion is paused for these ledgers so their balances cannot silently change.');
+      const entries = await tx.prepare("SELECT id, amount FROM entries WHERE owner_id = ? AND kind = 'money'").all(req.user.id);
+      const splits = await tx.prepare('SELECT id, amount, me_share, payer_kind FROM splits WHERE owner_id = ?').all(req.user.id);
+      const updates = entries.map((entry) => [convertAmount(entry.amount, quote.rate), entry.id]);
+      const splitUpdates = [];
+      for (const split of splits) {
+        const shares = await tx.prepare('SELECT friendship_id, amount FROM split_shares WHERE split_id = ? ORDER BY friendship_id').all(split.id);
+        const values = distributeConverted([...shares.map((s) => s.amount), split.me_share], quote.rate);
+        splitUpdates.push({ split, shares, values, total: convertAmount(split.amount, quote.rate) });
+      }
+      for (const [amount, id] of updates) await tx.prepare('UPDATE entries SET amount = ? WHERE id = ?').run(amount, id);
+      for (const { split, shares, values, total } of splitUpdates) {
+        await tx.prepare('UPDATE splits SET amount = ?, me_share = ? WHERE id = ?').run(total, values.at(-1), split.id);
+        for (let i = 0; i < shares.length; i++) {
+          await tx.prepare('UPDATE split_shares SET amount = ? WHERE split_id = ? AND friendship_id = ?').run(values[i], split.id, shares[i].friendship_id);
+          if (split.payer_kind === 'me') await tx.prepare('UPDATE entries SET amount = ? WHERE split_id = ? AND friendship_id = ?').run(values[i], split.id, shares[i].friendship_id);
+        }
+        if (split.payer_kind === 'friend') await tx.prepare('UPDATE entries SET amount = ? WHERE split_id = ?').run(values.at(-1), split.id);
+      }
+      await tx.prepare('UPDATE groups SET currency = ? WHERE owner_id = ?').run(to, req.user.id);
+      await tx.prepare('UPDATE users SET currency = ? WHERE id = ?').run(to, req.user.id);
+    });
+    const fresh = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    res.json({ user: await publicUser(fresh), quote });
+  } catch (error) { res.status(409).json({ error: 'conversion_failed', message: error.message }); }
 });
 
 r.post('/onboarded', async (req, res) => {
@@ -101,6 +221,11 @@ r.get('/events', async (req, res) => {
 r.post('/events/read', async (req, res) => {
   await db.prepare(`UPDATE events SET read = 1 WHERE user_id = ?`).run(req.user.id);
   res.json({ ok: true, unread: 0 });
+});
+
+r.delete('/events/:id', async (req, res) => {
+  await db.prepare(`DELETE FROM events WHERE id = ? AND user_id = ?`).run(req.params.id, req.user.id);
+  res.json({ ok: true });
 });
 
 /* ------------------------------ demo ledger ------------------------------ */
@@ -192,7 +317,7 @@ r.post('/demo', rateLimit({ windowMs: 3600_000, max: 5, key: 'demo' }), async (r
 
 /* -------------------------------- avatar photo ----------------------------- */
 r.post('/photo', validate(PhotoSchema), rateLimit({ windowMs: 3600_000, max: 20, key: 'photo' }), async (req, res) => {
-  const url = await saveDataUrl(req.valid.dataUrl, `u-${req.user.id}`);
+  const url = await saveDataUrl(req.valid.dataUrl, `u-${req.user.id}`, db, req.user.id);
   if (!url) return res.status(400).json({ error: 'bad_image', message: 'That image did not survive the trip. Try a JPG or PNG.' });
   const old = (await db.prepare(`SELECT avatar_path FROM users WHERE id = ?`).get(req.user.id)).avatar_path;
   await db.prepare(`UPDATE users SET avatar_path = ? WHERE id = ?`).run(url, req.user.id);
@@ -205,6 +330,7 @@ r.post('/photo', validate(PhotoSchema), rateLimit({ windowMs: 3600_000, max: 20,
 r.delete('/account', rateLimit({ windowMs: 3600_000, max: 3, key: 'delete' }), async (req, res) => {
   const id = req.user.id;
   await db.transaction(async (tx) => {
+    await tx.prepare(`DELETE FROM media WHERE owner_id = ?`).run(id);
     // Unlink, don't destroy, other people's books.
     await tx.prepare(`UPDATE friendships SET user_id = NULL WHERE user_id = ?`).run(id);
     await tx.prepare(`DELETE FROM friendships WHERE owner_id = ?`).run(id);
@@ -216,26 +342,26 @@ r.delete('/account', rateLimit({ windowMs: 3600_000, max: 3, key: 'delete' }), a
     await tx.prepare(`DELETE FROM refresh_tokens WHERE user_id = ?`).run(id);
     await tx.prepare(`DELETE FROM users WHERE id = ?`).run(id);
   });
+  res.clearCookie('at', { path: '/api/media' });
   res.json({ ok: true });
 });
 
 /* ------------------------------ share card ------------------------------- */
 
 r.get('/card', async (req, res) => {
-  const [totals, honor, friends] = await Promise.all([totalsFor(req.user.id), computeHonor(req.user.id), friendsFor(req.user.id)]);
+  const [totals, friends] = await Promise.all([totalsFor(req.user.id), friendsFor(req.user.id)]);
   const top = [...friends].filter((f) => f.net !== 0).sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).slice(0, 3);
   res.json({
     name: req.user.name,
     handle: req.user.handle,
     currency: req.user.currency,
-    honorScore: honor.score,
-    honorGrade: honor.grade,
     net: totals.net,
     owedToYou: totals.owedToYou,
     youOwe: totals.youOwe,
     friends: totals.friends,
     activeFriends: totals.activeFriends,
     openEntries: totals.openEntries,
+    disputedEntries: totals.disputedEntries,
     overdue: totals.overdue,
     favorsToYou: totals.favorsToYou,
     top: top.map((f) => ({ name: f.name, net: f.net })),

@@ -2,6 +2,7 @@
 
 import { h, $, buzz } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
+import { BrandMark } from '../ui/brand.js';
 import { state, setState, bus } from '../core/store.js';
 import { navigate, currentPath, navDir } from '../core/router.js';
 
@@ -70,6 +71,7 @@ export function buildChrome() {
         </div>
       </div>
       <div class="row" style="gap:2px" id="hdrActions"></div>
+      <span class="route-loading hide" id="routeLoading" role="status" aria-label="Loading page"></span>
     </header>
 
     <div class="pull-hint" id="pullHint">Release to refresh</div>
@@ -77,11 +79,13 @@ export function buildChrome() {
     <div id="bare" class="hide"></div>
 
     <nav class="tabbar hide" id="tabbar" aria-label="Primary">
+      <a class="tabbar__brand" href="#/" aria-label="Udhaar — ledger">${BrandMark()}<span>udhaar<span class="tabbar__brand-dot">.</span></span></a>
       ${tab('home', '/', 'Ledger', 'ledger', 'ledgerFill')}
       ${tab('groups', '/groups', 'Groups', 'people', 'peopleFill')}
-      <button class="tabbar__add" id="tabAdd" type="button" aria-label="Log a line">${Icon.plus}</button>
+      <button class="tabbar__add" id="tabAdd" type="button" aria-label="Add a line">${Icon.plus}<span>Add a line</span></button>
       ${tab('alerts', '/activity', 'Alerts', 'bell', 'bellFill')}
       ${tab('you', '/you', 'You', 'you', 'youFill')}
+      <p class="tabbar__note">The little things<br>between us.</p>
     </nav>
   `;
 

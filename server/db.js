@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   currency TEXT NOT NULL DEFAULT 'INR', honor_score REAL NOT NULL DEFAULT 50,
   honor_n INTEGER NOT NULL DEFAULT 0, onboarded INTEGER NOT NULL DEFAULT 0,
   plan TEXT NOT NULL DEFAULT 'free', theme TEXT NOT NULL DEFAULT 'system',
+  voice_mode TEXT NOT NULL DEFAULT 'neutral' CHECK (voice_mode IN ('neutral','male','female')),
   is_demo INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS friendships (
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS friendships (
   avatar_seed INTEGER NOT NULL DEFAULT 0, note TEXT, created_at INTEGER NOT NULL, UNIQUE(owner_id, handle)
 );
 CREATE INDEX IF NOT EXISTS idx_friendships_owner ON friendships(owner_id);
+CREATE INDEX IF NOT EXISTS idx_friendships_pair ON friendships(owner_id, user_id);
 CREATE TABLE IF NOT EXISTS entries (
   id TEXT PRIMARY KEY, friendship_id TEXT NOT NULL REFERENCES friendships(id) ON DELETE CASCADE,
   owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -35,7 +37,24 @@ CREATE INDEX IF NOT EXISTS idx_entries_friendship ON entries(friendship_id, stat
 CREATE INDEX IF NOT EXISTS idx_entries_owner ON entries(owner_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_entries_split ON entries(split_id);
 CREATE INDEX IF NOT EXISTS idx_entries_group ON entries(group_id, status, created_at);
-CREATE INDEX IF NOT EXISTS idx_group_members_friendship ON group_members(friendship_id);
+CREATE INDEX IF NOT EXISTS idx_entries_photo ON entries(photo);
+CREATE TABLE IF NOT EXISTS moments (
+  id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  friendship_id TEXT NOT NULL REFERENCES friendships(id) ON DELETE CASCADE,
+  title TEXT NOT NULL, note TEXT, occurred_on TEXT NOT NULL,
+  photo TEXT, created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_moments_friendship_date ON moments(friendship_id, occurred_on DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_moments_photo ON moments(photo);
+CREATE TABLE IF NOT EXISTS item_photos (
+  url TEXT PRIMARY KEY,
+  entry_id TEXT REFERENCES entries(id) ON DELETE CASCADE,
+  moment_id TEXT REFERENCES moments(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  CHECK ((entry_id IS NOT NULL) != (moment_id IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_item_photos_entry ON item_photos(entry_id, position);
+CREATE INDEX IF NOT EXISTS idx_item_photos_moment ON item_photos(moment_id, position);
 CREATE TABLE IF NOT EXISTS groups (
   id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL, currency TEXT NOT NULL DEFAULT 'INR', avatar_seed INTEGER NOT NULL DEFAULT 0,
@@ -46,6 +65,7 @@ CREATE TABLE IF NOT EXISTS group_members (
   friendship_id TEXT NOT NULL REFERENCES friendships(id) ON DELETE CASCADE,
   weight REAL NOT NULL DEFAULT 1, joined_at INTEGER NOT NULL, PRIMARY KEY (group_id, friendship_id)
 );
+CREATE INDEX IF NOT EXISTS idx_group_members_friendship ON group_members(friendship_id);
 CREATE TABLE IF NOT EXISTS splits (
   id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, payer_kind TEXT NOT NULL DEFAULT 'me',
@@ -87,7 +107,8 @@ CREATE TABLE IF NOT EXISTS invite_codes (
 );
 CREATE INDEX IF NOT EXISTS idx_invite_codes_owner ON invite_codes(owner_id);
 CREATE TABLE IF NOT EXISTS media (
-  id TEXT PRIMARY KEY, content_type TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL
+  id TEXT PRIMARY KEY, content_type TEXT NOT NULL, data BLOB NOT NULL, created_at INTEGER NOT NULL,
+  owner_id TEXT
 );
 `;
 
@@ -129,6 +150,35 @@ function wrapClient(client) {
   ready = (async () => {
     await client.execute('PRAGMA foreign_keys = ON');
     await client.executeMultiple(SCHEMA);
+    const columns = await client.execute('PRAGMA table_info(users)');
+    if (!columns.rows.some((row) => row.name === 'voice_mode')) {
+      try {
+        await client.execute("ALTER TABLE users ADD COLUMN voice_mode TEXT NOT NULL DEFAULT 'neutral'");
+      } catch (error) {
+        // Concurrent cold starts can both observe the old schema.
+        if (!String(error?.message || '').includes('duplicate column name')) throw error;
+      }
+    }
+    if (!columns.rows.some((row) => row.name === 'avatar_path')) {
+      try {
+        await client.execute('ALTER TABLE users ADD COLUMN avatar_path TEXT');
+      } catch (error) {
+        if (!String(error?.message || '').includes('duplicate column name')) throw error;
+      }
+    }
+    await client.execute('CREATE INDEX IF NOT EXISTS idx_users_avatar_path ON users(avatar_path)');
+    const mediaColumns = await client.execute('PRAGMA table_info(media)');
+    const needsMediaOwnerMigration = !mediaColumns.rows.some((row) => row.name === 'owner_id');
+    if (needsMediaOwnerMigration) {
+      try {
+        await client.execute('ALTER TABLE media ADD COLUMN owner_id TEXT');
+      } catch (error) {
+        if (!String(error?.message || '').includes('duplicate column name')) throw error;
+      }
+      await client.execute("UPDATE media SET owner_id = (SELECT id FROM users WHERE avatar_path = '/api/media/' || media.id LIMIT 1) WHERE owner_id IS NULL AND EXISTS (SELECT 1 FROM users WHERE avatar_path = '/api/media/' || media.id)");
+      await client.execute("UPDATE media SET owner_id = (SELECT owner_id FROM entries WHERE photo = '/api/media/' || media.id LIMIT 1) WHERE owner_id IS NULL AND EXISTS (SELECT 1 FROM entries WHERE photo = '/api/media/' || media.id)");
+    }
+    await client.execute('CREATE INDEX IF NOT EXISTS idx_media_owner ON media(owner_id)');
     return wrapped;
   })();
   return wrapped;

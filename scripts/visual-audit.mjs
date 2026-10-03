@@ -7,9 +7,10 @@ const base = process.env.BASE_URL || 'http://127.0.0.1:4173';
 const shots = process.env.UI_SHOTS;
 if (shots) mkdirSync(shots, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
-const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', colorScheme: process.env.UI_COLOR_SCHEME === 'dark' ? 'dark' : 'light' });
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
+page.on('console', message => { if (message.type() === 'error' || message.type() === 'warning') errors.push(`${message.type()}: ${message.text()}`); });
 
 async function inspect(name) {
   await page.waitForTimeout(400);
@@ -37,6 +38,10 @@ async function inspect(name) {
 
 try {
   await page.goto(base, { waitUntil: 'networkidle' });
+  await inspect('landing-390');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await inspect('landing-1280');
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('[data-act="login"]').click();
   await inspect('login-390');
   await page.setViewportSize({ width: 320, height: 568 });

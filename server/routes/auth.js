@@ -16,6 +16,7 @@ const publicUser = async (u) => ({
   avatarSeed: u.avatar_seed,
   currency: u.currency,
   theme: u.theme,
+  voiceMode: u.voice_mode || 'neutral',
   plan: u.plan,
   honorScore: Math.round(u.honor_score),
   honorGrade: (await computeHonor(u.id)).grade,
@@ -24,9 +25,20 @@ const publicUser = async (u) => ({
   contact: u.email || u.phone || null,
 });
 
-async function issueSession(res, user) {
+function setMediaSession(req, res, token) {
+  res.cookie('at', token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: req.secure,
+    path: '/api/media',
+    maxAge: 7 * 864e5,
+  });
+}
+
+async function issueSession(req, res, user) {
   const at = signAccess(user);
   const rt = await issueRefresh(user.id);
+  setMediaSession(req, res, at);
   res.cookie('rt', rt, { httpOnly: true, sameSite: 'lax', maxAge: 90 * 864e5, path: '/api/auth' });
   res.set('X-Session', `${at}|${rt}`);
   return { token: at, refreshToken: rt };
@@ -104,7 +116,7 @@ r.post('/signup', authBurst, validate(SignupSchema), async (req, res) => {
   }
 
   const user = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(id);
-  res.status(201).json({ user: await publicUser(user), ...await issueSession(res, user) });
+  res.status(201).json({ user: await publicUser(user), ...await issueSession(req, res, user) });
 });
 
 /* ---------------------------------- login -------------------------------- */
@@ -117,7 +129,7 @@ r.post('/login', authBurst, validate(LoginSchema), async (req, res) => {
   if (!row || !verifySecret(req.valid.secret, row.password_hash)) {
     return res.status(401).json({ error: 'bad_credentials', message: 'That handle and passcode don’t match.' });
   }
-  res.json({ user: await publicUser(row), ...await issueSession(res, row) });
+  res.json({ user: await publicUser(row), ...await issueSession(req, res, row) });
 });
 
 /* --------------------------------- refresh ------------------------------- */
@@ -129,7 +141,7 @@ r.post('/refresh', async (req, res) => {
   if (!rotated) return res.status(401).json({ error: 'unauthenticated', message: 'Session expired. Sign in again.' });
   const user = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(rotated.userId);
   if (!user) return res.status(401).json({ error: 'unauthenticated', message: 'Account not found.' });
-  res.json({ user: await publicUser(user), ...await issueSession(res, user) });
+  res.json({ user: await publicUser(user), ...await issueSession(req, res, user) });
 });
 
 /* --------------------------------- logout -------------------------------- */
@@ -141,12 +153,14 @@ r.post('/logout', async (req, res) => {
     if (rotated) await revokeAll(rotated.userId);
   }
   res.clearCookie('rt', { path: '/api/auth' });
+  res.clearCookie('at', { path: '/api/media' });
   res.json({ ok: true });
 });
 
 /* ---------------------------------- me ----------------------------------- */
 
 r.get('/me', requireAuth, async (req, res) => {
+  setMediaSession(req, res, signAccess(req.user));
   res.json({ user: await publicUser(req.user) });
 });
 
@@ -163,7 +177,7 @@ r.get('/invite/:token', rateLimit({ windowMs: 60_000, max: 60, key: 'invite' }),
   let entry = null;
   if (link.entry_id) {
     const e = await db
-      .prepare(`SELECT kind, direction, amount, note, status, created_at, photo FROM entries WHERE id = ?`)
+      .prepare(`SELECT owner_id, kind, direction, amount, note, status, created_at, photo FROM entries WHERE id = ?`)
       .get(link.entry_id);
     if (e) {
       entry = {
@@ -171,10 +185,13 @@ r.get('/invite/:token', rateLimit({ windowMs: 60_000, max: 60, key: 'invite' }),
         amount: e.amount,
         note: e.note,
         status: e.status,
-        // From the recipient's perspective the direction flips.
-        direction: e.direction === 'owed_to_me' ? 'owed_by_me' : 'owed_to_me',
+        // Flip only when the link creator also created the entry.
+        direction: link.owner_id === e.owner_id
+          ? (e.direction === 'owed_to_me' ? 'owed_by_me' : 'owed_to_me')
+          : e.direction,
         createdAt: e.created_at,
-        photo: e.photo || null,
+        // Receipt bytes are private until the invitee accepts and gains ledger access.
+        photo: null,
       };
     }
   }

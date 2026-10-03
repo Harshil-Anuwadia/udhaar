@@ -70,10 +70,10 @@ export function drawLedgerCard(d) {
 
   x.fillStyle = MUTE;
   x.font = font(25, SANS, '600');
-  x.fillText('NET POSITION', 72, 243);
+  x.fillText('MONEY BETWEEN PEOPLE', 72, 243);
   x.fillStyle = INK;
   x.font = font(72, SANS, '650');
-  x.fillText(d.net === 0 ? 'All settled' : d.headline || (due ? 'I owe' : "I'm owed"), 72, 349);
+  x.fillText(d.headline || (due ? 'I owe' : "I'm owed"), 72, 349);
 
   const amt = d.amountText || withSymbol(Math.abs(d.net || 0), d.currency);
   x.fillStyle = d.net === 0 ? INK : ACCENT;
@@ -134,15 +134,15 @@ export function drawLedgerCard(d) {
   rule(1135);
   x.fillStyle = MUTE;
   x.font = font(25, SANS, '600');
-  x.fillText('RELIABILITY', 72, 1185);
+  x.fillText('OPEN LINES', 72, 1185);
   x.fillStyle = INK;
   x.font = font(65, SANS, '650');
-  x.fillText(String(d.honorScore ?? 50), 72, 1252);
+  x.fillText(String(d.openEntries ?? 0), 72, 1252);
   x.font = font(31, SANS, '600');
-  x.fillText(d.honorGrade ?? 'Unproven', 320, 1214);
+  x.fillText(d.openEntries ? 'Still in the book' : 'Nothing open', 320, 1214);
   x.fillStyle = MUTE;
   x.font = font(25, SANS, '400');
-  x.fillText(fitLabel(d.honorNote ?? 'How reliably you settle up.', 688), 320, 1251);
+  x.fillText(fitLabel(d.disputedEntries ? `${d.disputedEntries} questioned ${d.disputedEntries === 1 ? 'line' : 'lines'} kept separately.` : d.openEntries ? 'The details stay here until you close them.' : 'The story stays, even after a line closes.', 688), 320, 1251);
   rule(1280);
   x.fillStyle = INK;
   x.font = font(25, SANS, '500');

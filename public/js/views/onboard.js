@@ -15,12 +15,11 @@ import { Wordmark, BrandMark } from './art.js';
 
 const CURRENCIES = [
   ['INR', '₹', 'Rupee'], ['USD', '$', 'Dollar'], ['GBP', '£', 'Pound'], ['EUR', '€', 'Euro'],
-  ['AED', 'AED', 'Dirham'], ['SGD', 'S$', 'SGD'], ['AUD', 'A$', 'AUD'], ['CAD', 'C$', 'CAD'],
+  ['AED', 'د.إ', 'Dirham'], ['SGD', 'S$', 'Singapore'], ['AUD', 'A$', 'Australia'], ['CAD', 'C$', 'Canada'],
 ];
 
 const LIKELY = [
   { name: 'My roommate', hint: 'rent, wifi, groceries' },
-  { name: 'The group trip', hint: 'the one nobody has settled' },
   { name: 'My best friend', hint: 'a hundred small things' },
   { name: 'Someone I lent money to', hint: 'and it’s been a while' },
 ];
@@ -37,7 +36,7 @@ function stepper(n, total = 3) {
 function step1HTML() {
   const cur = state.user.currency || 'INR';
   return `
-  <div class="auth onboard route-swap">
+  <div class="auth onboard onboard--currency route-swap">
     ${stepper(1)}
     <div class="onboard__art">${Art.coins()}</div>
     <div class="onboard__intro">
@@ -50,16 +49,10 @@ function step1HTML() {
       <div class="currency-grid">
         ${CURRENCIES.map(([code, sym, name]) => `
           <button class="dirbtn" data-cur="${code}" aria-pressed="${code === cur}" style="text-align:center;padding:10px 4px">
-            <b style="font-family:var(--font-mono);font-size:var(--fs-20)">${sym}</b>
-            <span style="font-size:11px">${name}</span>
+            <b class="currency-choice__symbol">${sym}</b>
+            <span class="currency-choice__code">${code}</span>
+            <span class="currency-choice__name">${name}</span>
           </button>`).join('')}
-      </div>
-    </div>
-
-    <div class="card" style="padding:var(--s3) var(--s4);background:var(--surface-2);margin-top:var(--s2)">
-      <div class="row" style="gap:var(--s3);align-items:flex-start">
-        <span style="color:var(--gold);flex:0 0 auto">${Icon.sparkle}</span>
-        <p class="tiny" style="color:var(--ink-2);line-height:1.55">This isn’t just for money. That charger they borrowed in 2022? <b>Favours and promises</b> can live here too.</p>
       </div>
     </div>
 
@@ -80,12 +73,14 @@ function bindStep1(main, outlet) {
     buzz(10);
     const button = event.currentTarget;
     button.disabled = true;
+    button.innerHTML = '<span class="btn__spinner"></span> Saving…';
     try {
       const res = await api.patchProfile({ currency: cur });
       setState({ user: res.user });
       mount(outlet, 'bare', () => step2HTML(), (m) => bindStep2(m, outlet));
     } catch (error) {
       button.disabled = false;
+      button.textContent = 'Continue';
       toastError(error.message || 'Could not save your currency. Try again.');
     }
   });
@@ -93,7 +88,7 @@ function bindStep1(main, outlet) {
 
 function step2HTML() {
   return `
-  <div class="auth onboard route-swap">
+  <div class="auth onboard onboard--person route-swap">
     ${stepper(2)}
     <div class="onboard__art">${Art.duo()}</div>
     <div class="onboard__intro">
@@ -174,7 +169,7 @@ function bindStep2(main, outlet) {
 function step3HTML(friend) {
   const cur = state.user.currency;
   return `
-  <div class="auth onboard route-swap">
+  <div class="auth onboard onboard--first route-swap">
     ${stepper(3)}
     <div class="onboard__art">${Art.pen()}</div>
     <div class="onboard__intro">
@@ -182,13 +177,13 @@ function step3HTML(friend) {
       <p class="small muted" style="max-width:34ch">Think of the last cab, coffee, or “I’ll get the next one.”</p>
     </div>
 
-    <div class="card" style="padding:var(--s4);display:flex;gap:var(--s3);align-items:center">
+    <div class="card onboard__person-card">
       ${avatarHTML({ name: friend.name, seed: friend.avatar_seed, size: 48 })}
       <div class="grow"><b class="strong">${esc(friend.name)}</b><p class="tiny muted">in your book</p></div>
       <span class="tag tag--settled">added</span>
     </div>
 
-    <div class="ledger-page" style="padding:var(--s5) var(--s5) var(--s5) calc(var(--s5) + 14px);margin-top:var(--s2)">
+    <div class="ledger-page onboard__first-line">
       <div class="netcard__label">Your first line</div>
       <div class="netcard__amount" style="color:var(--due)"><span class="cur">${symbol(cur)}</span><span id="ob-preview">0</span></div>
       <p class="netcard__verdict" id="ob-verdict">${esc(friend.name)} owes you this much.</p>
@@ -269,8 +264,10 @@ function bindStep3(main, outlet, friend) {
     }
   });
 
-  main.querySelector('[data-act="skip"]').addEventListener('click', async () => {
+  main.querySelector('[data-act="skip"]').addEventListener('click', async (event) => {
     buzz(6);
+    const button = event.currentTarget;
+    button.disabled = true; button.innerHTML = '<span class="btn__spinner"></span> Opening…';
     try { await api.onboarded(); const me = await api.me(); setState({ user: me.user }); } catch {}
     navigate('/', { replace: true });
   });
@@ -280,7 +277,7 @@ function bindStep3(main, outlet, friend) {
 
 /* ---------------------------- join via deep link --------------------------- */
 
-export async function viewJoin({ outlet, query }) {
+export async function viewJoin({ outlet, query, isCurrent = () => true }) {
   const token = query?.token;
   if (!token) {
     if (query?.code) return navigate(`/auth?code=${encodeURIComponent(query.code)}`);
@@ -292,6 +289,7 @@ export async function viewJoin({ outlet, query }) {
   let info;
   try { info = await api.invite(token); }
   catch (e) {
+    if (!isCurrent()) return;
     return mount(outlet, 'bare', () => `
       <div class="auth route-swap">
         <div class="col" style="margin:auto;text-align:center;gap:var(--s3);align-items:center">
@@ -302,6 +300,16 @@ export async function viewJoin({ outlet, query }) {
         </div>
       </div>`);
   }
+  if (!isCurrent()) return;
+
+  let existingPeople = [];
+  if (state.user) {
+    try {
+      const { friends } = await api.friends();
+      existingPeople = friends.filter((person) => !person.linked);
+    } catch { /* The invite can still be accepted as a new person. */ }
+  }
+  if (!isCurrent()) return;
 
   const cur = 'INR';
   mount(outlet, 'bare', () => `
@@ -322,12 +330,20 @@ export async function viewJoin({ outlet, query }) {
             ${info.entry.photo ? `<button type="button" class="photocard" data-lightbox><img src="${esc(info.entry.photo)}" alt="Receipt"><span>attached receipt</span></button>` : ''}
           </div>` : `
           <p class="small muted" style="max-width:32ch">They keep a ledger of who owes what. Join and you’ll see your side of it — and you can confirm or dispute any line.</p>`}
-        ${info.claimed ? `<span class="tag tag--settled">you already joined this ledger</span>` : ''}
+        ${info.claimed ? `<span class="tag tag--settled">This personal link has already been accepted</span>` : ''}
       </div>
 
       <div style="margin-top:auto" class="col">
-        <button class="btn btn--primary btn--lg btn--block" data-act="join">${state.user ? 'Link my ledger' : 'Join and see my side'}</button>
-        ${state.user ? '' : `<button class="btn btn--quiet btn--block" data-act="later" style="color:var(--ink-3)">Not now</button>`}
+        ${existingPeople.length ? `<div class="field" style="text-align:left">
+          <label class="field__label" for="existingFriend">Already have ${esc(info.inviter?.name || 'them')} in your book?</label>
+          <select class="input" id="existingFriend">
+            <option value="">No, make a new shared page</option>
+            ${existingPeople.map((person) => `<option value="${esc(person.id)}">Use my existing ${esc(person.name)} page</option>`).join('')}
+          </select>
+          <p class="tiny dim" style="margin-top:var(--s2)">Choose the existing page to share its older lines too.</p>
+        </div>` : ''}
+        <button class="btn btn--primary btn--lg btn--block" data-act="join">${state.user ? 'Link my ledger' : info.claimed ? 'Log in to the linked account' : 'Join and see my side'}</button>
+        ${state.user ? '' : `<button class="btn btn--quiet btn--block" data-act="login">${info.claimed ? 'Already signed in elsewhere? Log in' : 'Already have an account? Log in'}</button>`}
         <p class="tiny center dim">Free. No card, no contacts, no ads.</p>
       </div>
     </div>`,
@@ -335,6 +351,7 @@ export async function viewJoin({ outlet, query }) {
       main.querySelector('[data-lightbox]')?.addEventListener('click', () => openLightbox(info.entry?.photo, info.entry?.note || 'Receipt'));
       main.querySelector('[data-act="join"]').addEventListener('click', async (e) => {
         const b = e.currentTarget;
+        if (!state.user && info.claimed) return navigate(`/auth?join=${encodeURIComponent(token)}`);
         b.disabled = true; b.innerHTML = '<span class="btn__spinner"></span> Linking…';
         try {
           if (!state.user) {
@@ -342,7 +359,7 @@ export async function viewJoin({ outlet, query }) {
             const sheet = quickSignup(info);
             return;
           }
-          const res = await api.claim(token);
+          const res = await api.claim(token, main.querySelector('#existingFriend')?.value || null);
           buzz([12, 40, 16]);
           confetti({ count: 30, originY: 0.35 });
           toastOk(`Linked with ${res.inviter?.name || 'them'}.`);
@@ -353,7 +370,7 @@ export async function viewJoin({ outlet, query }) {
           toastError(err.message);
         }
       });
-      main.querySelector('[data-act="later"]')?.addEventListener('click', () => navigate('/auth'));
+      main.querySelector('[data-act="login"]')?.addEventListener('click', () => navigate(`/auth?join=${encodeURIComponent(token)}`));
     });
 
   function quickSignup(info) {
@@ -379,7 +396,9 @@ export async function viewJoin({ outlet, query }) {
         document.documentElement.dataset.theme = res.user.theme || 'system';
         bus.emit('signed-in', res.user);
         const claim = await api.claim(token);
-        await api.onboarded().catch(() => {});
+        await api.onboarded();
+        const { user } = await api.me();
+        setState({ user });
         buzz([12, 40, 16]);
         confetti({ count: 34, originY: 0.4 });
         s.close();

@@ -1,16 +1,16 @@
 /* Udhaar Plus: pay where the pain is, not where the paywall is. */
 
-import { h, esc, buzz, money, symbol, withSymbol, plural } from '../core/utils.js';
+import { h, esc, buzz, money, symbol, plural } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
 import { api } from '../core/api.js';
 import { state, setState, bus } from '../core/store.js';
 import { mount, setHeader, showFab } from './view.js';
 import { navigate } from '../core/router.js';
-import { toast, toastOk, toastError } from '../ui/toast.js';
-import { Sheet } from '../ui/sheet.js';
-import { confetti } from '../ui/confetti.js';
+import { toastError } from '../ui/toast.js';
+import { Sheet, confirmSheet } from '../ui/sheet.js';
 
-const PRICE_IN = { monthly: 99, yearly: 799 };
+const PRICE_IN = { lifetime: 29 };
+const PRICE_OTHER = { lifetime: 1 };
 
 const FEATURES = [
   { t: 'Unlimited people', d: 'Free includes 8. Plus has room for every flatmate, trip friend, and plus-one.' },
@@ -18,20 +18,21 @@ const FEATURES = [
   { t: 'Unlimited groups', d: 'More than the two groups included with free.' },
 ];
 
-export async function viewPlus({ outlet }) {
+export async function viewPlus({ outlet, isCurrent = () => true }) {
   mount(outlet, 'app', () => `<div class="card skeleton" style="height:220px"></div><div class="card skeleton" style="height:300px"></div>`);
   setHeader({ title: 'Udhaar Plus', back: true });
   showFab(false);
 
   const stats = state.stats || await api.stats().catch(() => null);
+  if (!isCurrent()) return;
   if (stats) setState({ stats });
-  mount(outlet, 'app', () => plusHTML(stats), (main) => bind(main, stats));
+  mount(outlet, 'app', () => plusHTML(stats), bind);
 }
 
 function plusHTML(stats) {
   const u = state.user;
   const cur = u.currency;
-  const price = cur === 'INR' ? PRICE_IN : { monthly: 2, yearly: 16 };
+  const price = cur === 'INR' ? PRICE_IN : PRICE_OTHER;
   const t = stats?.totals;
   const isPlus = u.plan === 'plus';
 
@@ -43,33 +44,28 @@ function plusHTML(stats) {
     </div>
     <h2>More room for<br>more shared moments.</h2>
     <p>${isPlus
-      ? 'Plus is active. The limits are off.'
+      ? 'Your Plus preview is on. The limits are off.'
       : t
-        ? `You’re tracking ${withSymbol(t.owedToYou, cur)} owed to you across ${plural(t.activeFriends, 'person', 'people')}. Keep everyone and every line together.`
+        ? `Your book has ${plural(t.friends, 'person', 'people')} and ${plural(t.openEntries, 'open line')}. Plus gives it more room to grow.`
         : 'For when your ledger grows beyond the free plan.'}</p>
   </section>
 
   ${isPlus ? `
     <div class="card" style="padding:var(--s5);text-align:center">
       <div style="color:var(--gold);justify-self:center;margin-bottom:8px">${Icon.checkCircle}</div>
-      <h3 class="serif" style="font-size:var(--fs-24)">Plus is active</h3>
-      <p class="small muted" style="margin-top:6px">No limits on people, entries, or groups.</p>
-      <button class="btn btn--quiet btn--block" style="margin-top:var(--s4);color:var(--due)" data-act="cancel">Manage plan</button>
+      <h3 class="serif" style="font-size:var(--fs-24)">You're on Plus</h3>
+      <p class="small muted" style="margin-top:6px">Lifetime access. No limits on people, entries, or groups.</p>
     </div>` : `
   <section class="col anim-rise" style="gap:var(--s3);animation-delay:50ms">
-    <button class="plan" data-plan="yearly" aria-pressed="true">
+    <button class="plan" data-plan="lifetime" aria-pressed="true">
       <span class="grow">
-        <span class="row" style="gap:8px"><b class="strong">Yearly</b><span class="tag tag--gold">Lower per month</span></span>
-        <span class="plan__per">${symbol(cur)}${money(price.yearly, cur)} a year · ${symbol(cur)}${(price.yearly / 12).toFixed(cur === 'INR' ? 0 : 2)}/mo</span>
+        <span class="row" style="gap:8px"><b class="strong">Lifetime Access</b><span class="tag tag--gold">One-time payment</span></span>
+        <span class="plan__per">Pay once, keep it forever. No subscriptions.</span>
       </span>
-      <span class="plan__price num">${symbol(cur)}${money(price.yearly, cur)}</span>
+      <span class="plan__price num">${symbol(cur)}${money(price.lifetime, cur)}</span>
     </button>
-    <button class="plan" data-plan="monthly" aria-pressed="false">
-      <span class="grow"><b class="strong">Monthly</b><span class="plan__per">Cancel whenever. No email required.</span></span>
-      <span class="plan__price num">${symbol(cur)}${money(price.monthly, cur)}</span>
-    </button>
-    <button class="btn btn--primary btn--lg btn--block" data-act="buy">${Icon.lock} Continue</button>
-      <p class="tiny dim center">Demo checkout. No payment is taken; Continue only turns on Plus in this build.</p>
+    <button class="btn btn--primary btn--lg btn--block" data-act="buy">Upgrade to Plus</button>
+    <p class="small muted center">Secure payment via Razorpay.</p>
   </section>
 
   <section class="card anim-rise" style="padding:var(--s4) var(--s5);animation-delay:80ms">
@@ -91,75 +87,92 @@ function plusHTML(stats) {
     <div class="section-head"><h2>What free already includes</h2></div>
     <div class="list" style="padding:var(--s2) 0">
       ${['8 people in your book', '120 ledger lines', '2 groups', 'Unlimited nudges & share links', 'CSV + JSON export', 'Offline logging & sync', 'Dark mode'].map((x) => `
-        <div class="setrow"><span class="setrow__icon" style="background:var(--settled-bg);color:var(--settled)">${Icon.check}</span><span class="setrow__label" style="font-weight:500">${esc(x)}</span></div>`).join('')}
+        <div class="free-feature"><span class="free-feature__tick">${Icon.check}</span><span>${esc(x)}</span></div>`).join('')}
     </div>
   </section>`;
 }
 
-function bind(main, stats) {
-  let plan = 'yearly';
+function bind(main) {
   main.addEventListener('click', async (e) => {
-    const p = e.target.closest('[data-plan]');
-    if (p) {
-      plan = p.dataset.plan;
-      buzz(6);
-      main.querySelectorAll('[data-plan]').forEach((x) => x.setAttribute('aria-pressed', String(x === p)));
-      return;
-    }
     const act = e.target.closest('[data-act]');
     if (!act) return;
     buzz(8);
 
-    if (act.dataset.act === 'cancel') {
-      await api.patchProfile({}).catch(() => {});
-      toast('Billing isn’t connected in this demo. Plus stays active here.');
-      return;
-    }
+    if (act.dataset.act === 'cancel') return confirmSheet({
+      title: 'Turn off Plus preview?',
+      body: 'Your book stays intact. The free plan limits will apply again.',
+      confirmLabel: 'Turn off preview',
+      onConfirm: async () => {
+        try {
+          const { user } = await api.patchProfile({ plan: 'free' });
+          setState({ user });
+          bus.emit('data-changed');
+          navigate('/plus');
+        } catch (error) { toastError(error.message || 'Could not update your plan.'); }
+      },
+    });
 
-    if (act.dataset.act === 'buy') return checkout(plan, act);
+    if (act.dataset.act === 'buy') {
+      const btn = act;
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="btn__spinner"></span> Connecting...';
+      try {
+        if (!window.Razorpay) throw new Error('Payment gateway is loading. Please try again in a moment.');
+        const order = await api.post('/api/me/create-order');
+        
+        const options = {
+          key: order.key_id,
+          amount: order.amount,
+          currency: order.currency,
+          name: 'Udhaar Plus',
+          description: 'Lifetime Access',
+          order_id: order.order_id,
+          handler: async function (response) {
+            btn.innerHTML = '<span class="btn__spinner"></span> Verifying...';
+            try {
+              const res = await api.post('/api/me/verify-payment', {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              });
+              setState({ user: res.user });
+              bus.emit('data-changed');
+              buzz([10, 30, 10]);
+              celebratePlus();
+            } catch (err) {
+              btn.disabled = false;
+              btn.innerHTML = originalText;
+              toastError('Payment verification failed. If money was deducted, contact support.');
+            }
+          },
+          modal: {
+            ondismiss: function () {
+              btn.disabled = false;
+              btn.innerHTML = originalText;
+            }
+          },
+          theme: { color: '#C4372A' }
+        };
+        const rzp = new window.Razorpay(options);
+        rzp.on('payment.failed', function (response){
+          toastError(response.error.description || 'Payment failed. Please try again.');
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+        });
+        rzp.open();
+      } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        toastError(err.message || 'Could not initiate payment.');
+      }
+    }
   });
 }
 
-function checkout(plan, btn) {
-  const cur = state.user.currency;
-  const price = (cur === 'INR' ? PRICE_IN : { monthly: 2, yearly: 16 })[plan];
-  const body = h('div', { class: 'col', style: { gap: 'var(--s3)' } });
-  body.innerHTML = `
-    <div class="ledger-page" style="padding:var(--s5) var(--s5) var(--s5) calc(var(--s5) + 14px)">
-      <div class="netcard__label">Udhaar Plus · ${plan}</div>
-      <div class="netcard__amount"><span class="cur">${symbol(cur)}</span>${money(price, cur)}</div>
-      <p class="small muted">${plan === 'yearly' ? 'Yearly plan selected.' : 'Monthly plan selected.'} No payment in this demo.</p>
-    </div>
-    <div class="card" style="padding:var(--s4);background:var(--surface-2)">
-      <b class="small">Demo checkout</b>
-      <p class="tiny muted" style="margin-top:4px;line-height:1.55">No payment provider is connected in this build. You won’t be charged. Confirm switches this account to Plus for testing.</p>
-    </div>
-  `;
-  const go = h('button', { class: 'btn btn--gold btn--lg btn--block', type: 'button', html: `${Icon.lock} Confirm ${withSymbol(price, cur)}` });
-  const s = new Sheet({ title: 'Confirm', body, footer: go });
-  s.open();
-  go.onclick = async () => {
-    go.disabled = true; go.innerHTML = '<span class="btn__spinner"></span> Processing…';
-    try {
-      await api.patchProfile({ plan: 'plus' }).catch(() => {});
-      await new Promise((r) => setTimeout(r, 620));
-      const me = await api.me();
-      const user = { ...me.user, plan: 'plus' };
-      setState({ user });
-      buzz([12, 40, 12, 40, 20]);
-      confetti({ count: 46, originY: 0.4 });
-      s.close();
-      celebratePlus(user);
-    } catch (e) {
-      go.disabled = false; go.innerHTML = `${Icon.lock} Confirm ${withSymbol(price, cur)}`;
-      toastError(e.message);
-    }
-  };
-}
-
-function celebratePlus(user) {
+function celebratePlus() {
   const s = new Sheet({
-    title: 'You’re Plus.',
+    title: 'Welcome to Plus.',
     sub: 'Your people, entries, and groups are uncapped.',
     body: `<div class="empty" style="padding:var(--s6) 0">
       <div style="color:var(--gold-bright);width:72px;height:72px">${Icon.crown}</div>
@@ -168,7 +181,7 @@ function celebratePlus(user) {
     </div>`,
     footer: [
       h('button', { class: 'btn btn--primary btn--lg btn--block', type: 'button', text: 'Back to my ledger', onclick: () => { s.close(); navigate('/'); } }),
-      h('button', { class: 'btn btn--quiet btn--block', type: 'button', text: 'Add everyone I’ve been leaving out', onclick: () => { s.close(); navigate('/'); import('./home.js').then((m) => m.openAddFriend()); } }),
+      h('button', { class: 'btn btn--quiet btn--block', type: 'button', text: 'Add a person', onclick: () => { s.close(); navigate('/'); import('./home.js').then((m) => m.openAddFriend()); } }),
     ],
   });
   s.open();

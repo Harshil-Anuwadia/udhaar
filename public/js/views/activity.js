@@ -4,7 +4,7 @@ import { h, esc, buzz, relTime, withSymbol, avatarHTML, money } from '../core/ut
 import { Icon } from '../ui/icons.js';
 import { Art } from '../ui/art.js';
 import { api } from '../core/api.js';
-import { setState, bus } from '../core/store.js';
+import { state, setState, bus } from '../core/store.js';
 import { mount, setHeader, showFab } from './view.js';
 import { navigate } from '../core/router.js';
 import { toast, toastError } from '../ui/toast.js';
@@ -18,8 +18,8 @@ const TYPE_META = {
   friend_joined: { icon: 'people', tone: 'credit' },
 };
 
-export async function viewActivity({ outlet }) {
-  setHeader({ title: 'Alerts' });
+export async function viewActivity({ outlet, isCurrent = () => true }) {
+  setHeader({ title: 'Alerts', sub: 'New lines, replies, and updates' });
   showFab(true);
 
   // Instant paint from cache
@@ -39,10 +39,12 @@ export async function viewActivity({ outlet }) {
       api.events().catch(() => ({ events: [], unread: 0 })),
       api.incoming().catch(() => ({ entries: [] })),
     ]);
+    if (!isCurrent()) return;
     events = ev.events; unread = ev.unread; incoming = inc.entries;
     setState({ events, unread: 0 });
     if (unread) api.readEvents().catch(() => {});
   } catch (e) {
+    if (!isCurrent()) return;
     toastError(e.message);
   }
 
@@ -84,14 +86,17 @@ function eventRow(e) {
   const bg = tone ? `var(--${tone}-bg)` : 'var(--surface-3)';
   const fg = tone ? `var(--${tone})` : 'var(--ink-2)';
   return `
-  <button class="setrow" data-ev="${esc(e.friendshipId || '')}" style="align-items:flex-start;${e.read ? '' : 'background:var(--surface-2)'}">
+  <div class="alert-row" data-alert="${esc(e.id)}">
+  <button class="setrow alert-row__content" data-ev="${esc(e.friendshipId || '')}" style="align-items:flex-start;${e.read ? '' : 'background:var(--surface-2)'}">
     <span class="setrow__icon" style="background:${bg};color:${fg}">${Icon[meta.icon]}</span>
     <span class="grow wrap">
       <span class="setrow__label" style="font-weight:${e.read ? 500 : 650};font-size:var(--fs-14);line-height:1.35;display:block">${esc(e.body || e.type)}</span>
       <span class="setrow__hint">${relTime(e.createdAt)}${e.read ? '' : ' · new'}</span>
     </span>
     ${e.read ? '' : '<span class="dot" style="margin-top:8px"></span>'}
-  </button>`;
+  </button>
+  <button class="alert-row__dismiss" data-dismiss-event="${esc(e.id)}" type="button" aria-label="Dismiss notification">${Icon.close}</button>
+  </div>`;
 }
 
 function incomingRow(e) {
@@ -109,7 +114,31 @@ function incomingRow(e) {
 }
 
 function bind(main, events, incoming) {
+  main.querySelectorAll('[data-alert]').forEach((row) => {
+    let startX = 0;
+    let startY = 0;
+    let suppressClick = false;
+    row.addEventListener('click', (event) => {
+      if (!suppressClick) return;
+      suppressClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
+    row.addEventListener('pointerdown', (event) => { startX = event.clientX; startY = event.clientY; });
+    row.addEventListener('pointerup', (event) => {
+      const dx = event.clientX - startX;
+      if (Math.abs(dx) > 65 && Math.abs(dx) > Math.abs(event.clientY - startY) * 1.3) {
+        event.preventDefault();
+        event.stopPropagation();
+        suppressClick = true;
+        setTimeout(() => { suppressClick = false; }, 300);
+        dismissEvent(row.dataset.alert, row, events);
+      }
+    });
+  });
   main.addEventListener('click', async (e) => {
+    const dismiss = e.target.closest('[data-dismiss-event]');
+    if (dismiss) { e.stopPropagation(); return dismissEvent(dismiss.dataset.dismissEvent, dismiss.closest('[data-alert]'), events); }
     const act = e.target.closest('[data-act]');
     if (act?.dataset.act === 'invite') {
       buzz(8);
@@ -127,4 +156,20 @@ function bind(main, events, incoming) {
       return toast('That person hasn’t been added to your side of the book yet.');
     }
   });
+}
+
+async function dismissEvent(id, row, events) {
+  if (!row || row.classList.contains('is-removing')) return;
+  row.classList.add('is-removing');
+  try {
+    await api.removeEvent(id);
+    const index = events.findIndex((event) => event.id === id);
+    if (index !== -1) events.splice(index, 1);
+    setState({ events: (state.events || []).filter((event) => event.id !== id) });
+    row.remove();
+    if (!events.length && !document.querySelector('[data-incoming]')) navigate('/activity');
+  } catch (error) {
+    row.classList.remove('is-removing');
+    toastError(error.message || 'Could not dismiss that update.');
+  }
 }

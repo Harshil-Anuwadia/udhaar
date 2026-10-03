@@ -14,11 +14,12 @@ import { openLightbox } from '../ui/lightbox.js';
 import { Art } from '../ui/art.js';
 import { openRecord } from './add.js';
 import { friendQuietCopy } from '../core/voice.js';
+import { photoPicker } from '../ui/photo-picker.js';
 
 const KIND_ICON = { money: 'rupee', favor: 'hands', gesture: 'heart' };
 const KIND_WORD = { money: 'money', favor: 'favour', gesture: 'promise' };
 
-export async function viewFriend({ outlet, params }) {
+export async function viewFriend({ outlet, params, isCurrent = () => true }) {
   mount(outlet, 'app', () => `
     <div class="card skeleton" style="height:160px"></div>
     <div class="card skeleton" style="height:260px"></div>`);
@@ -29,6 +30,7 @@ export async function viewFriend({ outlet, params }) {
   try {
     data = await api.friend(params.id);
   } catch (e) {
+    if (!isCurrent()) return;
     mount(outlet, 'app', () => `
       <div class="empty" style="padding-top:80px">
         <div class="empty__art">${Icon.alert}</div>
@@ -38,19 +40,20 @@ export async function viewFriend({ outlet, params }) {
       </div>`);
     return;
   }
+  if (!isCurrent()) return;
 
-  const { friend, entries, history, inviteToken } = data;
+  const { friend, entries, moments = [], history, inviteToken } = data;
   setHeader({
     title: `<span class="friend-title">${avatarHTML({ name: friend.name, seed: friend.avatar_seed, size: 32, avatarUrl: friend.avatarUrl })}<span class="friend-title__copy"><h1>${esc(friend.name)}</h1><span>${friend.linked ? 'Shared ledger · live' : 'Only in your book'}</span></span></span>`,
     back: true,
     actions: [{ label: 'Person settings', icon: Icon.settings, onClick: () => openFriendMenu(friend, inviteToken, () => viewFriend({ outlet, params })) }],
   });
 
-  mount(outlet, 'app', () => friendHTML(friend, entries, history, inviteToken), (main) => bindFriend(main, friend, entries, history, inviteToken));
+  mount(outlet, 'app', () => friendHTML(friend, entries, moments, history, inviteToken), (main) => bindFriend(main, friend, entries, moments, history, inviteToken));
   showFab(true);
 }
 
-function friendHTML(f, entries, history, inviteToken) {
+function friendHTML(f, entries, moments, history, inviteToken) {
   const cur = currencyCode();
   const open = entries.filter((e) => e.status === 'open');
   const settled = entries.filter((e) => e.status === 'settled');
@@ -59,7 +62,9 @@ function friendHTML(f, entries, history, inviteToken) {
   const zero = f.net === 0 && f.openCount === 0;
   const days = history.firstAt ? daysBetween(history.firstAt, Date.now()) : null;
   const shareUrl = `${location.origin}/#/join?token=${inviteToken}`;
-  const quiet = friendQuietCopy({ hasHistory: !!history.firstAt, seed: f.id });
+  const quiet = disputed.length
+    ? { title: 'No other open lines', body: 'The questioned line is above. It stays here until you both agree.' }
+    : friendQuietCopy({ hasHistory: !!history.firstAt, seed: f.id });
 
   return `
   ${f.note ? `<p class="friend-private-note anim-rise"><span>Your note</span>${esc(f.note)}</p>` : ''}
@@ -81,7 +86,8 @@ function friendHTML(f, entries, history, inviteToken) {
                     <button class="btn btn--outline" data-act="nudge">${Icon.nudge} Nudge</button>` : ''}
       ${f.net < 0 ? `<button class="btn btn--due" data-act="pay">${Icon.check} I paid them</button>
                     <button class="btn btn--outline" data-act="log">${Icon.plus} Log</button>` : ''}
-      ${f.net === 0 ? `<button class="btn btn--primary" style="grid-column:1/-1" data-act="log">${Icon.plus} Log your first thing</button>` : ''}
+      ${f.net === 0 ? `<button class="btn btn--primary" data-act="log">${Icon.plus} Add a line</button>
+                       <button class="btn btn--outline" data-act="moment">${Icon.heart} A moment</button>` : ''}
     </div>
     ${f.net !== 0 ? `<button class="btn btn--quiet btn--block" data-act="log">${Icon.plus} Log a line</button>` : ''}
   </section>
@@ -101,6 +107,7 @@ function friendHTML(f, entries, history, inviteToken) {
     ${open.length
       ? `<div class="list" id="openList">${open.map((e) => swipeRow(e, cur, f)).join('')}</div>
          <p class="tiny dim center" style="margin-top:8px">Swipe left on a line to settle or remind</p>`
+      : moments.length ? `<p class="moment-empty">Nothing open right now.</p>`
       : `<div class="card"><div class="empty" style="padding:var(--s8) var(--s5)">
           <div class="empty__art">${Art.chai()}</div>
           <h3>${quiet.title}</h3>
@@ -114,6 +121,15 @@ function friendHTML(f, entries, history, inviteToken) {
     <div class="list">${settled.slice(0, 3).map((e) => entryRow(e, cur, f)).join('')}</div>
   </section>` : ''}
 
+  <section class="anim-rise moment-section" aria-label="Moments with ${esc(f.name)}">
+    <div class="section-head">
+      <h2>Little moments</h2>
+      <button type="button" data-act="moment">${Icon.plus} Add a moment</button>
+    </div>
+    ${moments.length ? `<div class="moment-list">${moments.map(momentRow).join('')}</div>`
+      : `<p class="moment-empty">A place for the details worth keeping. Only you can see them for now.</p>`}
+  </section>
+
   <section class="card anim-rise" style="padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3)">
     <div class="row-between">
       <span class="twoside__art">${Art.clink()}</span>
@@ -124,12 +140,40 @@ function friendHTML(f, entries, history, inviteToken) {
       <button class="btn btn--sm btn--outline grow" data-act="copylink">${Icon.copy} Copy link</button>
       <button class="btn btn--sm btn--primary grow" data-act="sendlink">${Icon.send} Send</button>
     </div>
-    ${f.linked ? `<p class="tiny settled-text">${esc(f.name)} has an account and can confirm or dispute lines.</p>` : ''}
+    ${f.linked ? `<p class="tiny settled-text">Connected. New lines and changes show up in both ledgers.</p>` : '<p class="tiny dim">They will see this ledger after accepting the personal link.</p>'}
   </section>
   `;
 }
 
 const chipTag = (tone, text) => `<span class="tag tag--${tone}">${text}</span>`;
+
+function momentDate(day) {
+  return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function photoGallery(photos, label) {
+  if (!photos.length) return '';
+  return `<div class="photo-gallery ${photos.length === 1 ? 'photo-gallery--single' : ''}" aria-label="${esc(label)} photos">
+    ${photos.map((url, index) => `<button type="button" class="photo-gallery__item" data-photo-index="${index}" aria-label="Open photo ${index + 1} of ${photos.length}">
+      <img src="${esc(url)}" alt="${esc(label)} · ${index + 1} of ${photos.length}" loading="lazy">
+      ${photos.length > 1 ? `<span>${index + 1}/${photos.length}</span>` : ''}
+    </button>`).join('')}
+  </div>`;
+}
+
+function bindPhotoGallery(root, photos, label) {
+  root.querySelectorAll('[data-photo-index]').forEach((button) => button.addEventListener('click', () => {
+    openLightbox(photos[Number(button.dataset.photoIndex)], label);
+  }));
+}
+
+function momentRow(m) {
+  return `<button class="moment-row" type="button" data-moment="${esc(m.id)}">
+    ${m.photo ? `<span class="moment-row__photo"><img src="${esc(m.photo)}" alt="" loading="lazy">${m.photos?.length > 1 ? `<small>+${m.photos.length - 1}</small>` : ''}</span>` : `<span class="moment-row__glyph" aria-hidden="true">${Icon.heart}</span>`}
+    <span class="moment-row__copy"><strong>${esc(m.title)}</strong><span>${esc(momentDate(m.occurredOn))}${m.note ? ` · ${esc(m.note)}` : ''}</span></span>
+    <span class="moment-row__private" title="Only you can see this">${Icon.lock}<span>Only you</span></span>
+  </button>`;
+}
 
 function swipeRow(e, cur, f) {
   return `
@@ -145,7 +189,7 @@ function entryRow(e, cur, f, swipeable = false) {
   const amt = e.kind === 'money' ? withSymbol(e.amount, cur) : (e.kind === 'favor' ? 'favour' : 'promise');
   return `
   <button class="entry ${e.status === 'settled' ? 'is-settled' : ''}" data-entry="${e.id}" type="button" style="width:100%">
-    <span class="entry__mark entry__mark--${tone}">${Icon[KIND_ICON[e.kind]]}</span>
+    <span class="entry__mark entry__mark--${tone}">${e.kind === 'money' ? Icon.money : Icon[KIND_ICON[e.kind]]}</span>
     <span class="grow wrap">
       <span class="entry__note">${esc(e.note || KIND_WORD[e.kind])}</span>
       <span class="entry__meta">
@@ -159,14 +203,14 @@ function entryRow(e, cur, f, swipeable = false) {
         ${e.status === 'disputed' ? `<span class="tag tag--warn" style="padding:1px 6px">disputed</span>` : ''}
       </span>
     </span>
-    ${e.photo ? `<span class="entry__photo"><img src="${esc(e.photo)}" alt="" loading="lazy"></span>` : ''}
+    ${e.photo ? `<span class="entry__photo"><img src="${esc(e.photo)}" alt="" loading="lazy">${e.photos?.length > 1 ? `<small>+${e.photos.length - 1}</small>` : ''}</span>` : ''}
     <span class="entry__amt"><b class="${tone}-text">${amt}</b></span>
   </button>`;
 }
 
 /* --------------------------------- bind ---------------------------------- */
 
-function bindFriend(main, f, entries, history, inviteToken) {
+function bindFriend(main, f, entries, moments, history, inviteToken) {
   const cur = currencyCode();
   const shareUrl = `${location.origin}/#/join?token=${inviteToken}`;
   const open = entries.filter((e) => e.status === 'open');
@@ -182,7 +226,7 @@ function bindFriend(main, f, entries, history, inviteToken) {
           ]
         : [
             { id: 'settle', label: 'Paid', tone: 'settle', icon: Icon.check },
-            { id: 'delete', label: 'Delete', tone: 'delete', icon: Icon.trash },
+            ...(e.ownedByMe ? [{ id: 'delete', label: 'Delete', tone: 'delete', icon: Icon.trash }] : []),
           ],
       onAction: async (act) => {
         if (act === 'settle') return settleEntry(e, f, main);
@@ -203,17 +247,23 @@ function bindFriend(main, f, entries, history, inviteToken) {
 
   main.addEventListener('click', async (ev) => {
     const entryEl = ev.target.closest('[data-entry]');
+    const momentEl = ev.target.closest('[data-moment]');
     const actEl = ev.target.closest('[data-act]');
 
     if (entryEl) {
       const e = entries.find((x) => x.id === entryEl.dataset.entry);
       return openEntrySheet(e, f, cur, shareUrl);
     }
+    if (momentEl) {
+      const moment = moments.find((item) => item.id === momentEl.dataset.moment);
+      if (moment) return openMomentSheet(moment, f);
+    }
     if (!actEl) return;
     buzz(8);
     const act = actEl.dataset.act;
 
     if (act === 'log') return openRecord({ friendshipId: f.id });
+    if (act === 'moment') return openMomentComposer(f);
     if (act === 'settle-all') return settleAll(open, f);
     if (act === 'pay') return settleAll(open.filter((e) => e.direction === 'owed_by_me'), f, 'paid');
     if (act === 'nudge') return nudgeAll(open.filter((e) => e.direction === 'owed_to_me'), f, shareUrl);
@@ -226,6 +276,79 @@ function bindFriend(main, f, entries, history, inviteToken) {
       window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
     }
   });
+}
+
+function todayLocal() {
+  const date = new Date();
+  const two = (number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
+}
+
+function openMomentComposer(friend) {
+  const today = todayLocal();
+  const body = h('div', { class: 'moment-composer' });
+  body.innerHTML = `
+    <div class="field"><label class="field__label" for="moment-title">What happened?</label>
+      <input class="input" id="moment-title" type="text" maxlength="80" placeholder="The café after the rain" autocomplete="off"></div>
+    <div class="field"><label class="field__label" for="moment-day">When?</label>
+      <input class="input" id="moment-day" type="date" max="${today}" value="${today}"></div>
+    <div class="field"><label class="field__label" for="moment-note">A detail to keep <span class="muted">· optional</span></label>
+      <textarea class="input" id="moment-note" maxlength="500" rows="3" placeholder="One sentence is enough."></textarea></div>
+    <p class="moment-composer__privacy">${Icon.lock} Only in your book. ${esc(friend.name)} won't see this.</p>`;
+  const title = body.querySelector('#moment-title');
+  const day = body.querySelector('#moment-day');
+  let photos = [];
+  body.insertBefore(photoPicker({
+    id: 'moment-photo', label: 'Add photos · optional', photos,
+    onChange: (next) => { photos = next; buzz(6); },
+  }), body.querySelector('.moment-composer__privacy'));
+  const save = h('button', { class: 'btn btn--primary btn--lg btn--block', type: 'button', text: 'Keep this moment', disabled: true });
+  const sheet = new Sheet({ title: 'Remember a moment', sub: `With ${esc(friend.name)}`, body, footer: save });
+  title.addEventListener('input', () => { save.disabled = !title.value.trim(); });
+  save.addEventListener('click', async () => {
+    if (!title.value.trim() || !day.value) return;
+    save.disabled = true;
+    save.innerHTML = '<span class="btn__spinner"></span> Keeping…';
+    try {
+      await api.addMoment(friend.id, {
+        title: title.value.trim(), occurredOn: day.value,
+        note: body.querySelector('#moment-note').value.trim(),
+        photos,
+      });
+      sheet.close();
+      toastOk('Moment kept. Only you can see it.');
+      bus.emit('data-changed');
+      navigate(`/friend/${friend.id}`);
+    } catch (error) { save.disabled = false; save.textContent = 'Keep this moment'; toastError(error.message); }
+  });
+  sheet.open();
+}
+
+function openMomentSheet(moment, friend) {
+  const body = h('div', { class: 'moment-detail' });
+  const photos = moment.photos?.length ? moment.photos : moment.photo ? [moment.photo] : [];
+  body.innerHTML = `
+    ${photoGallery(photos, `Photo from ${moment.title}`)}
+    <p class="moment-detail__date">${esc(momentDate(moment.occurredOn))} · only in your book</p>
+    <h3>${esc(moment.title)}</h3>
+    ${moment.note ? `<p class="moment-detail__note">${esc(moment.note)}</p>` : ''}`;
+  bindPhotoGallery(body, photos, moment.title);
+  const remove = h('button', { class: 'btn btn--quiet btn--block', type: 'button', text: 'Delete moment', style: { color: 'var(--due)' } });
+  const sheet = new Sheet({ title: 'A little moment', body, footer: remove });
+  remove.addEventListener('click', () => {
+    sheet.close();
+    confirmSheet({ title: 'Delete this moment?', body: 'It will leave your book, including its photos. There is no undo.', confirmLabel: 'Delete moment', danger: true,
+      onConfirm: async () => {
+        try {
+          await api.removeMoment(friend.id, moment.id);
+          toastOk('Moment deleted.');
+          bus.emit('data-changed');
+          navigate(`/friend/${friend.id}`);
+        } catch (error) { toastError(error.message); }
+      },
+    });
+  });
+  sheet.open();
 }
 
 async function settleEntry(e, f, main) {
@@ -242,10 +365,11 @@ async function settleEntry(e, f, main) {
 
   const cur = currencyCode();
   const body = h('div', { class: 'col', style: { gap: 'var(--s3)' } });
+  const photos = e.photos?.length ? e.photos : e.photo ? [e.photo] : [];
   body.innerHTML = `
-    ${e.photo ? `<button type="button" class="photocard" data-lightbox><img src="${esc(e.photo)}" alt="Receipt for ${esc(e.note || 'this line')}"><span>tap to enlarge</span></button>` : ''}
+    ${photoGallery(photos, `Receipt for ${e.note || 'this line'}`)}
     <p class="small muted">Full amount is <b class="num" style="color:var(--ink)">${withSymbol(e.amount, cur)}</b>. Settled a different number? Change it.</p>
-    <input class="input num" id="settleAmt" type="text" inputmode="numeric" value="${e.amount}" style="font-size:var(--fs-24);text-align:center;font-family:var(--font-mono)">
+    <input class="input num" id="settleAmt" type="text" inputmode="decimal" value="${e.amount}" style="font-size:var(--fs-24);text-align:center;font-family:var(--font-mono)">
     <div class="quickrow" style="justify-content:center">
       <button class="quick" data-q="full" type="button">Full</button>
       <button class="quick" data-q="half" type="button">Half</button>
@@ -255,16 +379,16 @@ async function settleEntry(e, f, main) {
   const input = body.querySelector('#settleAmt');
   body.querySelectorAll('[data-q]').forEach((b) => b.addEventListener('click', () => {
     buzz(5);
-    input.value = b.dataset.q === 'full' ? e.amount : b.dataset.q === 'half' ? Math.round(e.amount / 2) : 0;
+    input.value = b.dataset.q === 'full' ? e.amount : b.dataset.q === 'half' ? Math.round(e.amount * 50) / 100 : 0;
   }));
 
   const go = h('button', { class: 'btn btn--primary btn--lg btn--block', type: 'button', text: 'Mark settled' });
-  body.querySelector('[data-lightbox]')?.addEventListener('click', () => openLightbox(e.photo, e.note || 'Receipt'));
+  bindPhotoGallery(body, photos, e.note || 'Receipt');
   const sheet = new Sheet({ title: 'Settle this line', sub: esc(e.note || KIND_WORD[e.kind]), body, footer: go });
   sheet.open();
 
   go.onclick = async () => {
-    const amt = Math.max(0, Math.min(Number(input.value.replace(/[^\d]/g, '')) || 0, e.amount));
+    const amt = Math.max(0, Math.min(Math.round((Number(input.value.replace(/[^\d.]/g, '')) || 0) * 100) / 100, e.amount));
     go.disabled = true; go.innerHTML = '<span class="btn__spinner"></span>';
     try {
       const res = await api.settle(e.id, amt < e.amount ? amt : undefined);
@@ -296,7 +420,7 @@ async function settleAll(open, f, mode = 'settled') {
       for (const e of relevant) { try { await api.settle(e.id); ok += 1; } catch {} }
       buzz([14, 50, 20]);
       confetti({ count: 40, originY: 0.35 });
-      toastOk(`${plural(ok, 'line')} settled. Your reliability score updated.`);
+      toastOk(`${plural(ok, 'line')} closed. The details stay in the book.`);
       bus.emit('data-changed');
       navigate('/');
     },
@@ -356,6 +480,7 @@ async function nudgeAll(open, f, shareUrl) {
 function openEntrySheet(e, f, cur, shareUrl) {
   const isDue = e.direction === 'owed_to_me';
   const body = h('div', { class: 'col', style: { gap: 'var(--s3)' } });
+  const photos = e.photos?.length ? e.photos : e.photo ? [e.photo] : [];
   body.innerHTML = `
     <div class="ledger-page" style="padding:var(--s5) var(--s5) var(--s5) calc(var(--s5) + 14px)">
       <div class="netcard__label">${isDue ? `${esc(f.name)} owes you` : `You owe ${esc(f.name)}`}</div>
@@ -363,13 +488,13 @@ function openEntrySheet(e, f, cur, shareUrl) {
         ? `<div class="netcard__amount" style="color:${isDue ? 'var(--credit)' : 'var(--due)'}"><span class="cur">${symbol(cur)}</span>${money(e.amount, cur)}</div>`
         : `<div class="serif" style="font-size:var(--fs-24);padding:var(--s2) 0">${esc(e.note || KIND_WORD[e.kind])}</div>`}
       ${e.note && e.kind === 'money' ? `<p class="small muted">“${esc(e.note)}”</p>` : ''}
-      <p class="tiny dim" style="margin-top:8px">Logged ${formatDate(e.createdAt)} · ${relTime(e.createdAt)}</p>
+      <p class="tiny dim" style="margin-top:8px">${e.ownedByMe ? 'You logged this' : `${esc(f.name)} logged this`} · ${formatDate(e.createdAt)} · ${relTime(e.createdAt)}</p>
       ${e.dueAt ? `<p class="tiny" style="color:${e.overdue ? 'var(--due)' : 'var(--ink-3)'};font-weight:600">${esc(dueLabel(e.dueAt))}</p>` : ''}
     </div>
-    ${e.photo ? `<button type="button" class="photocard" data-lightbox><img src="${esc(e.photo)}" alt="Receipt"><span>tap to enlarge</span></button>` : ''}
+    ${photoGallery(photos, e.note || 'Receipt')}
   `;
 
-  body.querySelector('[data-lightbox]')?.addEventListener('click', () => openLightbox(e.photo, e.note || 'Receipt'));
+  bindPhotoGallery(body, photos, e.note || 'Receipt');
 
   const actions = [];
   if (e.status === 'open') {
@@ -383,7 +508,7 @@ function openEntrySheet(e, f, cur, shareUrl) {
       try { await api.reopen(e.id); s.close(); bus.emit('data-changed'); toast('Reopened.'); } catch (err) { toastError(err.message); }
     } }));
   }
-  actions.push(h('button', { class: 'btn btn--block btn--quiet', type: 'button', style: 'color:var(--due)', text: 'Delete', onclick: () => {
+  if (e.ownedByMe) actions.push(h('button', { class: 'btn btn--block btn--quiet', type: 'button', style: 'color:var(--due)', text: 'Delete', onclick: () => {
     s.close();
     confirmSheet({
       title: 'Delete this line?', body: 'It leaves the book permanently.', confirmLabel: 'Tear it out', danger: true,

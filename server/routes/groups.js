@@ -173,7 +173,12 @@ r.post('/:id/members', async (req, res) => {
 r.delete('/:id', async (req, res) => {
   const g = await ownGroup(req.user.id, req.params.id);
   if (!g) return res.status(404).json({ error: 'not_found', message: 'Group not found.' });
-  await db.prepare(`DELETE FROM groups WHERE id = ?`).run(g.id);
+  await db.transaction(async (tx) => {
+    // A group is organization, not the source of truth for money. Keep every
+    // ledger line (including settled lines) when its split record goes away.
+    await tx.prepare(`UPDATE entries SET group_id = NULL, split_id = NULL WHERE group_id = ?`).run(g.id);
+    await tx.prepare(`DELETE FROM groups WHERE id = ?`).run(g.id);
+  });
   res.json({ ok: true });
 });
 

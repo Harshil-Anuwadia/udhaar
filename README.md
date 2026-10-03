@@ -1,12 +1,18 @@
-# Udhaar — a ledger for what friends owe you
+# Udhaar — a social memory ledger
 
-A mobile-first PWA for tracking money, favours and vows between friends.
+A mobile-first PWA for remembering money, favours and promises between people.
 Two-sided ledgers: the other person confirms or disputes each line, so nobody
 has to be the awkward one twice. Built solo-founder style: Express + SQLite
 backend, zero-framework vanilla ES-module frontend, no build step.
+Person pages also support private Moments with up to four photos; these are not
+shared with a linked person.
 
 The product discovery doc (18 points: insight, monetisation, viral loop,
 moat, risks…) lives in [`STRATEGY.md`](STRATEGY.md).
+The product voice, category, privacy rules, and future experience system live in
+[`BRAND_WORLD.md`](BRAND_WORLD.md).
+The staged long-term product architecture lives in
+[`PRODUCT_SYSTEM.md`](PRODUCT_SYSTEM.md).
 
 ---
 

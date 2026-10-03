@@ -5,65 +5,83 @@ const DAY = 86_400_000;
 
 /* ------------------------------- balances ------------------------------- */
 
-export async function balanceFor(friendshipId) {
-  const rows = await db
-    .prepare(
-      `SELECT kind, direction, SUM(amount) AS total, COUNT(*) AS n
-         FROM entries
-        WHERE friendship_id = ? AND status = 'open' AND kind = 'money'
-        GROUP BY kind, direction`,
-    )
-    .all(friendshipId);
+const flipDirection = (direction) => direction === 'owed_to_me' ? 'owed_by_me' : 'owed_to_me';
 
-  let toMe = 0;
-  let byMe = 0;
-  for (const r of rows) {
-    if (r.direction === 'owed_to_me') toMe += r.total;
-    else byMe += r.total;
+/** Read one pair's canonical lines from both people's friendship rows. */
+export async function sharedEntriesFor(friendship) {
+  const rows = await db.prepare(
+    `SELECT e.* FROM entries e
+       JOIN friendships source ON source.id = e.friendship_id
+      WHERE e.friendship_id = ?
+         OR (source.owner_id = ? AND source.user_id = ?)
+      ORDER BY e.created_at DESC, e.rowid DESC`,
+  ).all(friendship.id, friendship.user_id || '', friendship.owner_id);
+  return rows.map((entry) => ({
+    ...entry,
+    friendship_id: friendship.id,
+    direction: entry.owner_id === friendship.owner_id ? entry.direction : flipDirection(entry.direction),
+    owned_by_me: entry.owner_id === friendship.owner_id,
+  }));
+}
+
+function summarizeEntries(entries) {
+  const out = { money: 0, theyOwe: 0, youOwe: 0, favorsToMe: 0, favorsByMe: 0, gesturesToMe: 0, gesturesByMe: 0, openCount: 0, disputedCount: 0, overdueCount: 0 };
+  const time = now();
+  for (const entry of entries) {
+    if (entry.status === 'disputed') { out.disputedCount++; continue; }
+    if (entry.status !== 'open') continue;
+    out.openCount++;
+    if (entry.due_at && entry.due_at < time) out.overdueCount++;
+    const toMe = entry.direction === 'owed_to_me';
+    if (entry.kind === 'money') {
+      if (toMe) out.theyOwe += entry.amount;
+      else out.youOwe += entry.amount;
+    } else if (entry.kind === 'favor') {
+      if (toMe) out.favorsToMe++;
+      else out.favorsByMe++;
+    } else if (entry.kind === 'gesture') {
+      if (toMe) out.gesturesToMe++;
+      else out.gesturesByMe++;
+    }
   }
-  return { money: toMe - byMe, theyOwe: toMe, youOwe: byMe };
+  out.money = out.theyOwe - out.youOwe;
+  return out;
+}
+
+export async function balanceFor(friendshipId) {
+  const friendship = await db.prepare(`SELECT * FROM friendships WHERE id = ?`).get(friendshipId);
+  if (!friendship) return { money: 0, theyOwe: 0, youOwe: 0 };
+  const { money, theyOwe, youOwe } = summarizeEntries(await sharedEntriesFor(friendship));
+  return { money, theyOwe, youOwe };
 }
 
 export async function countsFor(friendshipId) {
-  const rows = await db
-    .prepare(
-      `SELECT kind, direction, COUNT(*) AS n
-         FROM entries
-        WHERE friendship_id = ? AND status = 'open' AND kind != 'money'
-        GROUP BY kind, direction`,
-    )
-    .all(friendshipId);
-
-  const out = { favorsToMe: 0, favorsByMe: 0, gesturesToMe: 0, gesturesByMe: 0 };
-  for (const r of rows) {
-    if (r.kind === 'favor') r.direction === 'owed_to_me' ? (out.favorsToMe += r.n) : (out.favorsByMe += r.n);
-    if (r.kind === 'gesture') r.direction === 'owed_to_me' ? (out.gesturesToMe += r.n) : (out.gesturesByMe += r.n);
-  }
-  return out;
+  const friendship = await db.prepare(`SELECT * FROM friendships WHERE id = ?`).get(friendshipId);
+  if (!friendship) return { favorsToMe: 0, favorsByMe: 0, gesturesToMe: 0, gesturesByMe: 0 };
+  const { favorsToMe, favorsByMe, gesturesToMe, gesturesByMe } = summarizeEntries(await sharedEntriesFor(friendship));
+  return { favorsToMe, favorsByMe, gesturesToMe, gesturesByMe };
 }
 
 /** Everything we show about one friendship row in a list. */
 export async function decorate(friendship) {
-  const [b, c, last, openRow, avatarRow] = await Promise.all([
-    balanceFor(friendship.id),
-    countsFor(friendship.id),
-    db
-    .prepare(
-      `SELECT kind, direction, amount, note, created_at FROM entries
-        WHERE friendship_id = ? ORDER BY created_at DESC LIMIT 1`,
-    )
-    .get(friendship.id),
-    db.prepare(`SELECT COUNT(*) AS n FROM entries WHERE friendship_id = ? AND status = 'open'`).get(friendship.id),
+  const [entries, avatarRow] = await Promise.all([
+    sharedEntriesFor(friendship),
     friendship.user_id ? db.prepare(`SELECT avatar_path FROM users WHERE id = ?`).get(friendship.user_id) : null,
   ]);
+  const totals = summarizeEntries(entries);
   return {
     ...friendship,
-    net: b.money,
-    theyOwe: b.theyOwe,
-    youOwe: b.youOwe,
-    ...c,
-    openCount: openRow.n,
-    lastEntry: last ?? null,
+    net: totals.money,
+    theyOwe: totals.theyOwe,
+    youOwe: totals.youOwe,
+    favorsToMe: totals.favorsToMe,
+    favorsByMe: totals.favorsByMe,
+    gesturesToMe: totals.gesturesToMe,
+    gesturesByMe: totals.gesturesByMe,
+    openCount: totals.openCount,
+    disputedCount: totals.disputedCount,
+    overdueCount: totals.overdueCount,
+    lastEntry: entries[0] ?? null,
     linked: !!friendship.user_id,
     avatarUrl: friendship.user_id
       ? avatarRow?.avatar_path || null
@@ -77,7 +95,7 @@ export async function friendsFor(ownerId, { includeEmpty = true } = {}) {
     .all(ownerId);
   const decorated = await Promise.all(rows.map(decorate));
   if (includeEmpty) return decorated;
-  return decorated.filter((f) => f.net !== 0 || f.openCount > 0);
+  return decorated.filter((f) => f.net !== 0 || f.openCount > 0 || f.disputedCount > 0);
 }
 
 export async function totalsFor(ownerId) {
@@ -92,14 +110,6 @@ export async function totalsFor(ownerId) {
     favorsToYou += f.favorsToMe;
     favorsByYou += f.favorsByMe;
   }
-  const [openRow, overdueRow] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) AS n FROM entries WHERE owner_id = ? AND status = 'open'`).get(ownerId),
-    db.prepare(
-      `SELECT COUNT(*) AS n FROM entries
-        WHERE owner_id = ? AND status = 'open' AND due_at IS NOT NULL AND due_at < ?`,
-    )
-    .get(ownerId, now()),
-  ]);
   return {
     owedToYou,
     youOwe,
@@ -107,9 +117,10 @@ export async function totalsFor(ownerId) {
     favorsToYou,
     favorsByYou,
     friends: friends.length,
-    activeFriends: friends.filter((f) => f.net !== 0 || f.openCount > 0).length,
-    openEntries: openRow.n,
-    overdue: overdueRow.n,
+    activeFriends: friends.filter((f) => f.net !== 0 || f.openCount > 0 || f.disputedCount > 0).length,
+    openEntries: friends.reduce((sum, friend) => sum + friend.openCount, 0),
+    disputedEntries: friends.reduce((sum, friend) => sum + friend.disputedCount, 0),
+    overdue: friends.reduce((sum, friend) => sum + friend.overdueCount, 0),
   };
 }
 
@@ -120,11 +131,16 @@ const W = { settledEarly: 100, settledLate: 62, openOnTime: 48, overdue: 8 };
 export async function computeHonor(ownerId) {
   const rows = await db
     .prepare(
-      `SELECT status, due_at, settled_at, created_at FROM entries
-        WHERE owner_id = ? AND direction = 'owed_by_me' AND status != 'void'
-        ORDER BY created_at DESC LIMIT 200`,
+      `SELECT e.status, e.due_at, e.settled_at, e.created_at FROM entries e
+         JOIN friendships source ON source.id = e.friendship_id
+        WHERE e.status != 'void' AND (
+          (e.owner_id = ? AND e.direction = 'owed_by_me')
+          OR (source.user_id = ? AND e.direction = 'owed_to_me' AND EXISTS (
+            SELECT 1 FROM friendships mine WHERE mine.owner_id = ? AND mine.user_id = source.owner_id
+          ))
+        ) ORDER BY e.created_at DESC LIMIT 200`,
     )
-    .all(ownerId);
+    .all(ownerId, ownerId, ownerId);
 
   if (!rows.length) return { score: 50, grade: 'Just started', n: 0, onTimeRate: null };
 

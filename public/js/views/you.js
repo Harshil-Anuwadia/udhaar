@@ -1,6 +1,6 @@
-/* You: honor score, ledger card, settings, and the exit doors. */
+/* You: your book, sharing, settings, and the exit doors. */
 
-import { h, esc, buzz, money, symbol, withSymbol, avatarHTML, plural, copyText, shortMoney, relTime, formatDate, fileToDataUrl } from '../core/utils.js';
+import { h, esc, buzz, money, symbol, withSymbol, setCurrency, avatarHTML, plural, copyText, shortMoney, relTime, formatDate, fileToDataUrl } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
 import { api, clearSession, flushQueue } from '../core/api.js';
 import { state, setState, bus, savePrefs, loadPrefs, applyTheme, clearCache } from '../core/store.js';
@@ -12,7 +12,7 @@ import { drawLedgerCard, shareCanvas, loadRowImages } from '../ui/sharecard.js';
 import { confetti } from '../ui/confetti.js';
 import { openInvite } from './home.js';
 
-export async function viewYou({ outlet }) {
+export async function viewYou({ outlet, isCurrent = () => true }) {
   setHeader({ title: 'Account' });
   showFab(false);
 
@@ -29,6 +29,7 @@ export async function viewYou({ outlet }) {
   const [stats, card, invites] = await Promise.all([
     api.stats(), api.card().catch(() => null), api.invites().catch(() => ({ links: [], used: 0 })),
   ]);
+  if (!isCurrent()) return;
   setState({ stats });
 
   const changed = !hadCache ||
@@ -44,9 +45,9 @@ export async function viewYou({ outlet }) {
 function youHTML(u, stats, card, invites) {
   const cur = u.currency;
   const t = stats.totals;
-  const honor = stats.honor;
   const prefs = loadPrefs();
   const themeName = u.theme === 'dark' ? 'Dark' : u.theme === 'light' ? 'Light' : 'System';
+  const voiceName = u.voiceMode === 'male' ? 'Deadpan' : u.voiceMode === 'female' ? 'Conversational' : 'Original';
 
   return `
   <div class="account-profile anim-rise">
@@ -64,7 +65,7 @@ function youHTML(u, stats, card, invites) {
 
   <div class="account-quick anim-rise" aria-label="Account actions">
     <button class="account-quick__action" data-act="theme">${Icon.palette}<span>Appearance<small>${themeName} · change</small></span></button>
-    <button class="account-quick__action" data-act="currency" aria-label="Change currency, currently ${esc(cur)}">${Icon.coins}<span>Currency<small>${esc(cur)} · change</small></span></button>
+    <button class="account-quick__action" data-act="currency" aria-label="Change currency, currently ${esc(cur)}"><b class="currency-glyph" aria-hidden="true">${esc(symbol(cur))}</b><span>Currency<small>${esc(cur)} · change</small></span></button>
     <button class="account-quick__action" data-act="export">${Icon.fileExport}<span>Export ledger<small>Keep a copy</small></span></button>
     <button class="account-quick__action" data-act="logout">${Icon.logout}<span>Sign out<small>On this device</small></span></button>
   </div>
@@ -73,19 +74,20 @@ function youHTML(u, stats, card, invites) {
     <div class="section-head"><h2>Settings</h2></div>
     <div class="list">
       ${setRow('nudges', Icon.nudge, 'Nudge updates', '', 'switch', prefs.nudges !== false, '', 'green', 'Know when someone confirms or questions a line')}
+      ${setRow('voice', Icon.sparkle, 'Voice', voiceName, 'row', false, '', 'gold', `Your book sounds ${voiceName.toLowerCase()}`)}
       ${setRow('install', Icon.device, 'Install on this phone', 'Opens like an app', 'row', false, !state.installPrompt && !isStandalone() ? 'dim' : '', 'neutral')}
       ${setRow('plus', Icon.crown, 'Udhaar Plus', u.plan === 'plus' ? 'Active' : 'More people, groups, and history', 'row', false, '', 'gold')}
     </div>
   </section>
 
-  <section class="card card--honor anim-rise" style="padding:var(--s5);animation-delay:40ms">
-    <div class="row" style="gap:var(--s4);align-items:center">
-      ${honorRingBig(honor.score)}
-      <div class="grow">
-        <div class="field__label">Your reliability</div>
-        <div class="honor-grade">${esc(honor.grade)}</div>
-        <p class="tiny muted" style="margin-top:4px;line-height:1.4">${honorLine(honor)}</p>
+  <section class="card account-book anim-rise" style="padding:var(--s5);animation-delay:40ms">
+    <div class="row-between" style="align-items:flex-start;gap:var(--s4)">
+      <div>
+        <div class="field__label">Your book</div>
+        <h2 class="serif" style="font-size:var(--fs-24);line-height:1.15;margin:var(--s1) 0">Little things, kept together.</h2>
+        <p class="tiny muted">The people and lines you’ve actually added.</p>
       </div>
+      <span style="color:var(--gold);flex:0 0 auto" aria-hidden="true">${Icon.ledger}</span>
     </div>
     <div class="divider" style="margin:var(--s4) 0"></div>
     <div class="statgrid">
@@ -94,7 +96,7 @@ function youHTML(u, stats, card, invites) {
       <div class="stat"><b class="num credit-text">${shortMoney(t.owedToYou, cur)}</b><span>Owed to you</span></div>
       <div class="stat"><b class="num due-text">${shortMoney(t.youOwe, cur)}</b><span>You owe</span></div>
     </div>
-    ${stats.activeDays > 1 ? `<p class="tiny dim center" style="margin-top:var(--s3)">You’ve kept tabs on ${stats.activeDays} different days.</p>` : ''}
+    ${t.disputedEntries ? `<p class="tiny muted" style="margin-top:var(--s3)">${plural(t.disputedEntries, 'questioned line')} still in the book.</p>` : ''}
   </section>
 
   <section class="anim-rise" style="animation-delay:70ms">
@@ -125,36 +127,11 @@ function youHTML(u, stats, card, invites) {
     </div>
   </section>
 
-  <p class="tiny center dim" style="padding:var(--s4) 0 var(--s8)">udhaar · keep tabs, keep friends<br><span style="opacity:.7">v1.14.2</span></p>
+  <p class="tiny center dim" style="padding:var(--s4) 0 var(--s8)">udhaar · the little things between us</p>
   `;
 }
 
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-
-function honorLine(honor) {
-  if (honor.n === 0) return 'No settled lines yet. Your score starts taking shape as you use the app.';
-  if (honor.score >= 88) return 'You settle your side on time. That shows.';
-  if (honor.score >= 74) return 'Mostly on time. Clear a late line to move this up.';
-  if (honor.score >= 58) return 'A few lines are past due. Settle one and the score updates.';
-  return 'Late lines affect this score. You can bring it back by settling them.';
-}
-
-function honorRingBig(score) {
-  const r = 40; const c = 2 * Math.PI * r; const pct = Math.max(0, Math.min(100, score)) / 100;
-  const color = score >= 74 ? 'var(--gold-bright)' : score >= 50 ? 'var(--ink-3)' : 'var(--due)';
-  return `
-  <div class="honor-score">
-    <svg width="72" height="72" viewBox="0 0 96 96" style="rotate:-90deg" aria-hidden="true">
-      <circle cx="48" cy="48" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="8"/>
-      <circle cx="48" cy="48" r="${r}" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round"
-        stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct)}" style="transition:stroke-dashoffset 1s var(--ease-out)"/>
-    </svg>
-    <div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center">
-      <div><div class="num" style="font-size:var(--fs-24);font-weight:700;line-height:1">${score}</div>
-      <div class="tiny dim" style="font-size:10px;letter-spacing:.06em;text-transform:uppercase">score</div></div>
-    </div>
-  </div>`;
-}
 
 function setRow(act, icon, label, hint, type = 'row', on = false, dim = '', tint = 'neutral', sub = '') {
   // One predictable row: label and status together, action on the right.
@@ -206,6 +183,7 @@ function bindYou(main, stats, card, invites) {
     switch (key) {
       case 'theme': return themeSheet();
       case 'currency': return currencySheet();
+      case 'voice': return voiceSheet();
       case 'edit': return editProfile();
       case 'card': return openCardSheet(card);
       case 'invite': return openInvite(state.friends?.length ? state.friends : (await api.friends()).friends);
@@ -265,27 +243,66 @@ function themeSheet() {
   });
 }
 
+function voiceSheet() {
+  const current = state.user.voiceMode || 'neutral';
+  actionSheet({
+    title: 'The voice of your book',
+    sub: 'Just the examples and asides. Pick what sounds like you; change it anytime.',
+    actions: [
+      { id: 'neutral', label: 'Original', hint: 'Plain, warm, a little dry' },
+      { id: 'male', label: 'Deadpan', hint: 'Male-coded group chaos and dry humour' },
+      { id: 'female', label: 'Conversational', hint: 'Female-coded social details and warmth' },
+    ].map(({ id, label, hint }) => ({
+      label, hint, icon: Icon.sound, selected: current === id,
+      onSelect: async () => {
+        try {
+          const { user } = await api.patchProfile({ voiceMode: id });
+          setState({ user });
+          bus.emit('data-changed');
+          navigate('/you');
+        } catch (error) { toastError(error.message || 'Could not save that voice.'); }
+      },
+    })),
+  });
+}
+
 const CURRENCIES = [
   ['INR', '₹', 'Indian Rupee'], ['USD', '$', 'US Dollar'], ['GBP', '£', 'Pound'], ['EUR', '€', 'Euro'],
-  ['AED', 'AED', 'Dirham'], ['SGD', 'S$', 'Singapore Dollar'], ['AUD', 'A$', 'Australian Dollar'], ['CAD', 'C$', 'Canadian Dollar'],
+  ['AED', 'د.إ', 'UAE Dirham'], ['SGD', 'S$', 'Singapore Dollar'], ['AUD', 'A$', 'Australian Dollar'], ['CAD', 'C$', 'Canadian Dollar'],
 ];
 
 function currencySheet() {
   const current = state.user.currency;
   actionSheet({
     title: 'Currency',
-    sub: 'Choose how amounts appear across your ledger.',
+    sub: 'Choose a currency. Saved amounts will be converted at the latest available reference rate.',
     actions: CURRENCIES.map(([code, sym, name]) => ({
-      label: `${sym}  ${name}`,
-      value: code === current ? 'Selected' : code,
-      icon: code === current ? Icon.checkCircle : null,
+      label: name,
+      hint: code,
+      selected: code === current,
+      icon: `<span class="currency-glyph" aria-hidden="true">${esc(sym)}</span>`,
       onSelect: async () => {
+        if (code === current) return;
         try {
-          const res = await api.patchProfile({ currency: code });
-          setState({ user: res.user });
-          toastOk(`Currency set to ${code}.`);
-          bus.emit('data-changed');
-          navigate('/you');
+          const quote = await api.currencyQuote(code);
+          if (quote.linkedLines) return toastError('Linked money lines cannot be converted safely yet. Their other owner would see the wrong currency.');
+          const sample = Math.round(100 * quote.rate * 100) / 100;
+          confirmSheet({
+            title: `Convert to ${code}?`,
+            body: `Rate from ${esc(quote.date)}: ${withSymbol(100, current)} ≈ ${withSymbol(sample, code)}. This rewrites ${quote.lines} saved money lines and ${quote.groups} group books, including settled history. Amounts round to the nearest cent and cannot be restored exactly by switching back.`,
+            confirmLabel: `Convert to ${code}`,
+            onConfirm: async () => {
+              try {
+                const res = await api.changeCurrency(quote);
+                setCurrency(code);
+                setState({ user: res.user, friends: [], groups: [], stats: null });
+                clearCache();
+                bus.emit('data-changed');
+                navigate('/you');
+                toastOk(`Converted at the ${res.quote.date} rate.`);
+              } catch (error) { toastError(error.message); throw error; }
+            },
+          });
         } catch (e) { toastError(e.message); }
       },
     })),
@@ -307,12 +324,12 @@ function editProfile() {
   const s = new Sheet({ title: 'Your details', body, footer: go });
   s.open();
   go.onclick = async () => {
-    go.disabled = true;
+    go.disabled = true; go.innerHTML = '<span class="btn__spinner"></span> Saving…';
     try {
       const res = await api.patchProfile({ name: body.querySelector('#ep-name').value.trim() });
       setState({ user: res.user });
       s.close(); toastOk('Saved.'); navigate('/you');
-    } catch (e) { go.disabled = false; toastError(e.message); }
+    } catch (e) { go.disabled = false; go.textContent = 'Save'; toastError(e.message); }
   };
 }
 
@@ -332,30 +349,32 @@ export async function openCardSheet(card) {
   const data = {
     ...card,
     currency: cur,
-    headline: due ? 'I owe' : "I'm owed",
+    headline: due ? 'I owe' : card.net === 0 ? (card.openEntries + (card.disputedEntries || 0) ? 'Money evens out' : 'All square') : "I'm owed",
     amountText: withSymbol(Math.abs(card.net), cur),
     subline: `${plural(card.activeFriends, 'person', 'people')} · ${plural(card.openEntries, 'open line', 'open lines')}`,
-    stamp: due ? 'DEBTOR' : card.net === 0 ? 'ALL SQUARE' : 'CREDITOR',
     rows,
-    honorNote: card.overdue ? `${plural(card.overdue, 'line')} past due.` : 'Nothing overdue.',
   };
 
   data.rowImages = await loadRowImages(rows);
-  const canvas = drawLedgerCard(data);
+  const privateRows = rows.map((r) => ({ ...r, name: r.name[0] + '•'.repeat(Math.max(2, r.name.length - 1)) }));
+  const canvas = drawLedgerCard({ ...data, rows: privateRows, rowImages: {} });
   canvas.style.cssText = 'width:100%;border:1px solid var(--line);border-radius:var(--r-lg)';
 
   const hideNames = h('button', { class: 'snapshot-privacy', type: 'button', 'aria-pressed': 'false' });
-  hideNames.innerHTML = `<span><strong>Hide names</strong><small>For posting publicly</small></span><span class="switch" aria-hidden="true"></span>`;
+  hideNames.setAttribute('aria-pressed', 'true');
+  hideNames.innerHTML = `<span><strong>Names hidden</strong><small>Tap to include people.</small></span><span class="switch" aria-hidden="true"></span>`;
 
   const body = h('div', { class: 'col', style: { gap: 'var(--s3)' } });
   body.append(hideNames, canvas);
 
-  let blurred = false;
+  let blurred = true;
   hideNames.addEventListener('click', () => {
     blurred = !blurred;
     buzz(6);
     hideNames.setAttribute('aria-pressed', String(blurred));
-    const c2 = drawLedgerCard({ ...data, rowImages: blurred ? {} : data.rowImages, rows: blurred ? data.rows.map((r) => ({ ...r, name: r.name[0] + '•'.repeat(Math.max(2, r.name.length - 1)) })) : data.rows });
+    hideNames.querySelector('strong').textContent = blurred ? 'Names hidden' : 'Names visible';
+    hideNames.querySelector('small').textContent = blurred ? 'Tap to include people.' : 'Tap to hide before sharing.';
+    const c2 = drawLedgerCard({ ...data, rowImages: blurred ? {} : data.rowImages, rows: blurred ? privateRows : data.rows });
     c2.style.cssText = canvas.style.cssText;
     canvas.replaceWith(c2);
     cardCanvas.el = c2;
@@ -368,7 +387,7 @@ export async function openCardSheet(card) {
     shareBtn.disabled = true; shareBtn.innerHTML = '<span class="btn__spinner"></span> Rendering…';
     const res = await shareCanvas(cardCanvas.el, {
       title: 'My udhaar ledger',
-      text: `${due ? 'I owe' : "I'm owed"} ${withSymbol(Math.abs(card.net), cur)}. Reliability score ${card.honorScore} — ${card.honorGrade}.`,
+      text: `${data.headline} ${data.amountText}. ${plural(card.openEntries, 'line')} still open in my book.`,
     });
     shareBtn.disabled = false; shareBtn.innerHTML = `${Icon.share} Share card`;
     if (res.ok && res.via === 'share') { buzz([10, 30, 10]); s.close(); }
@@ -378,7 +397,7 @@ export async function openCardSheet(card) {
 
   const textBtn = h('button', { class: 'btn btn--outline btn--block', type: 'button', html: `${Icon.copy} Copy summary` });
   textBtn.onclick = async () => {
-    const msg = `My udhaar snapshot:\n${due ? 'I owe' : "I'm owed"} ${withSymbol(Math.abs(card.net), cur)} across ${plural(card.activeFriends, 'person', 'people')}.\nReliability score: ${card.honorScore} — ${card.honorGrade}\n${card.overdue ? `${card.overdue} lines past due.` : 'Nothing overdue.'}\n${location.origin}`;
+    const msg = `My udhaar snapshot:\n${data.headline} ${data.amountText} across ${plural(card.activeFriends, 'person', 'people')}.\n${plural(card.openEntries, 'line')} still open.${card.disputedEntries ? ` ${plural(card.disputedEntries, 'line')} questioned.` : ''}\n${location.origin}`;
     const ok = await copyText(msg);
     toast(ok ? 'Summary copied.' : 'Could not copy.', { kind: ok ? 'ok' : 'error' });
   };

@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { db, newId, now } from '../db.js';
 import { requireAuth, rateLimit } from '../auth.js';
-import { FriendSchema, validate } from '../validate.js';
-import { decorate, friendsFor, makeShareToken } from '../ledger.js';
+import { FriendSchema, MomentSchema, validate } from '../validate.js';
+import { selectedPhotoInputs, savePhotoSet, attachPhotoSet, photoMapFor, photosForItem, unlinkUrls } from '../photos.js';
+import { decorate, friendsFor, makeShareToken, sharedEntriesFor, syncHonor } from '../ledger.js';
 import { publicUser } from './auth.js';
 
 const r = Router();
@@ -68,13 +69,6 @@ r.post('/', validate(FriendSchema), async (req, res) => {
     });
   }
 
-  // If they typed a handle that belongs to a real user, link immediately.
-  let linkedUserId = null;
-  if (handle) {
-    const target = await db.prepare(`SELECT id FROM users WHERE handle = ? AND id != ?`).get(handle, ownerId);
-    if (target) linkedUserId = target.id;
-  }
-
   const id = newId('f');
   await db.prepare(
     `INSERT INTO friendships (id, owner_id, user_id, handle, name, avatar_seed, note, created_at)
@@ -82,7 +76,7 @@ r.post('/', validate(FriendSchema), async (req, res) => {
   ).run(
     id,
     ownerId,
-    linkedUserId,
+    null,
     handle || `f_${id.slice(-6)}`,
     name,
     Math.floor(Math.random() * 1e6),
@@ -91,7 +85,6 @@ r.post('/', validate(FriendSchema), async (req, res) => {
   );
 
   const token = await inviteTokenFor(id, ownerId);
-  if (linkedUserId) await mirrorFriendship(ownerId, id, linkedUserId);
 
   const created = await db.prepare(`SELECT * FROM friendships WHERE id = ?`).get(id);
   res.status(201).json({ friend: await decorate(created), inviteToken: token });
@@ -101,44 +94,64 @@ r.post('/', validate(FriendSchema), async (req, res) => {
  * Create the reciprocal friendship row for the other user so both sides share
  * one ledger, and cross-link the two rows.
  */
-export async function mirrorFriendship(inviterId, inviterFriendshipId, inviteeId) {
-  const inviter = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(inviterId);
-  const row = await db.prepare(`SELECT * FROM friendships WHERE id = ?`).get(inviterFriendshipId);
+export async function mirrorFriendship(inviterId, inviterFriendshipId, inviteeId, storage = db, existingFriendshipId = null) {
+  const inviter = await storage.prepare(`SELECT * FROM users WHERE id = ?`).get(inviterId);
+  const row = await storage.prepare(`SELECT * FROM friendships WHERE id = ?`).get(inviterFriendshipId);
   if (!inviter || !row) return null;
+  if (row.owner_id !== inviterId || (row.user_id && row.user_id !== inviteeId)) {
+    const error = new Error('This ledger is already linked to someone else.');
+    error.code = 'already_linked';
+    throw error;
+  }
 
-  let mine = await db
+  let mine = await storage
     .prepare(`SELECT * FROM friendships WHERE owner_id = ? AND user_id = ?`)
     .get(inviteeId, inviterId);
 
+  if (existingFriendshipId) {
+    const selected = await storage.prepare(`SELECT * FROM friendships WHERE id = ? AND owner_id = ?`)
+      .get(existingFriendshipId, inviteeId);
+    if (!selected || (selected.user_id && selected.user_id !== inviterId) || (mine && mine.id !== selected.id)) {
+      const error = new Error('That person cannot be linked to this invite.');
+      error.code = 'invalid_friend';
+      throw error;
+    }
+    if (!mine) {
+      await storage.prepare(`UPDATE friendships SET user_id = ? WHERE id = ?`)
+        .run(inviterId, selected.id);
+      mine = await storage.prepare(`SELECT * FROM friendships WHERE id = ?`).get(selected.id);
+    }
+  }
+
   if (!mine) {
     const id = newId('f');
-    await db.prepare(
+    const handleTaken = await storage.prepare(`SELECT id FROM friendships WHERE owner_id = ? AND handle = ?`)
+      .get(inviteeId, inviter.handle);
+    await storage.prepare(
       `INSERT INTO friendships (id, owner_id, user_id, handle, name, avatar_seed, note, created_at)
        VALUES (?,?,?,?,?,?,?,?)`,
     ).run(
       id,
       inviteeId,
       inviterId,
-      inviter.handle,
+      handleTaken ? `f_${id.slice(-6)}` : inviter.handle,
       inviter.name,
       inviter.avatar_seed,
       `Came in through your link · they call you “${row.name}”`,
       now(),
     );
-    mine = await db.prepare(`SELECT * FROM friendships WHERE id = ?`).get(id);
+    mine = await storage.prepare(`SELECT * FROM friendships WHERE id = ?`).get(id);
   }
 
-  await db.prepare(`UPDATE friendships SET user_id = ? WHERE id = ?`).run(inviteeId, inviterFriendshipId);
-  await db.prepare(
-    `INSERT INTO events (id, user_id, friendship_id, type, body, created_at) VALUES (?,?,?,?,?,?)`,
-  ).run(
-    newId('ev'),
-    inviterId,
-    inviterFriendshipId,
-    'friend_joined',
-    `${mine.name} joined Udhaar. Your ledger is now live on both sides.`,
-    now(),
-  );
+  if (!row.user_id) {
+    await storage.prepare(`UPDATE friendships SET user_id = ? WHERE id = ?`).run(inviteeId, inviterFriendshipId);
+    await storage.prepare(
+      `INSERT INTO events (id, user_id, friendship_id, type, body, created_at) VALUES (?,?,?,?,?,?)`,
+    ).run(
+      newId('ev'), inviterId, inviterFriendshipId, 'friend_joined',
+      `${mine.name} joined Udhaar. Your ledger is now live on both sides.`, now(),
+    );
+  }
   return mine;
 }
 
@@ -148,10 +161,9 @@ r.get('/:id', async (req, res) => {
   const f = await getOwnedFriendship(req.user.id, req.params.id);
   if (!f) return res.status(404).json({ error: 'not_found', message: 'No such person in your ledger.' });
 
-  const entryRows = await db
-    .prepare(`SELECT * FROM entries WHERE friendship_id = ? ORDER BY created_at DESC, rowid DESC`)
-    .all(f.id);
-  const entries = entryRows.map(hydrateEntry);
+  const entryRows = await sharedEntriesFor(f);
+  const entryPhotos = await photoMapFor('entry', entryRows.map((entry) => entry.id));
+  const entries = entryRows.map((entry) => hydrateEntry({ ...entry, photos: photosForItem(entryPhotos, entry) }));
 
   const settled = entries.filter((e) => e.status === 'settled');
   const history = {
@@ -163,12 +175,56 @@ r.get('/:id', async (req, res) => {
     reminders: entries.reduce((s, e) => s + e.remindCount, 0),
   };
 
+  const momentRows = await db.prepare(`
+    SELECT id, title, note, occurred_on AS occurredOn, photo, created_at AS createdAt
+    FROM moments WHERE friendship_id = ? AND owner_id = ?
+    ORDER BY occurred_on DESC, created_at DESC LIMIT 50
+  `).all(f.id, req.user.id);
+  const momentPhotos = await photoMapFor('moment', momentRows.map((moment) => moment.id));
+  const moments = momentRows.map((moment) => ({ ...moment, photos: photosForItem(momentPhotos, moment) }));
+
   res.json({
     friend: await decorate(f),
     entries,
+    moments,
     history,
     inviteToken: await inviteTokenFor(f.id, req.user.id),
   });
+});
+
+r.post('/:id/moments', validate(MomentSchema), async (req, res) => {
+  const friend = await getOwnedFriendship(req.user.id, req.params.id);
+  if (!friend) return res.status(404).json({ error: 'not_found', message: 'No such person.' });
+  const id = newId('m');
+  const photos = await savePhotoSet(selectedPhotoInputs(req.valid), req.user.id);
+  if (!photos) return res.status(400).json({ error: 'bad_image', message: 'Use up to four JPG, PNG, or WebP images under 3 MB each.' });
+  const createdAt = now();
+  try {
+    await db.transaction(async (tx) => {
+      await tx.prepare(`INSERT INTO moments (id, owner_id, friendship_id, title, note, occurred_on, photo, created_at)
+        VALUES (?,?,?,?,?,?,?,?)`)
+        .run(id, req.user.id, friend.id, req.valid.title, req.valid.note || null, req.valid.occurredOn, photos[0] || null, createdAt);
+      await attachPhotoSet('moment', id, photos, tx);
+    });
+  } catch (error) {
+    await unlinkUrls(photos);
+    throw error;
+  }
+  res.status(201).json({ moment: {
+    id, title: req.valid.title, note: req.valid.note || null,
+    occurredOn: req.valid.occurredOn, photo: photos[0] || null, photos, createdAt,
+  } });
+});
+
+r.delete('/:id/moments/:momentId', async (req, res) => {
+  const moment = await db.prepare(`SELECT m.photo FROM moments m JOIN friendships f ON f.id = m.friendship_id
+    WHERE m.id = ? AND m.friendship_id = ? AND m.owner_id = ? AND f.owner_id = ?`)
+    .get(req.params.momentId, req.params.id, req.user.id, req.user.id);
+  if (!moment) return res.status(404).json({ error: 'not_found', message: 'No such moment.' });
+  const photos = photosForItem(await photoMapFor('moment', [req.params.momentId]), { id: req.params.momentId, photo: moment.photo });
+  await db.prepare(`DELETE FROM moments WHERE id = ? AND owner_id = ?`).run(req.params.momentId, req.user.id);
+  await unlinkUrls(photos);
+  res.json({ ok: true });
 });
 
 r.patch('/:id', async (req, res) => {
@@ -190,12 +246,20 @@ r.delete('/:id', async (req, res) => {
     .prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS s FROM entries WHERE friendship_id = ? AND status='open'`)
     .get(f.id);
   const otherOwnerId = f.user_id;
-  await db.prepare(`DELETE FROM friendships WHERE id = ?`).run(f.id);
-  // Unlink the other side's row but keep their data intact.
-  if (otherOwnerId) {
-    await db.prepare(`UPDATE friendships SET user_id = NULL, note = COALESCE(note,?) WHERE owner_id = ? AND user_id = ?`)
-      .run('They removed their side of the ledger.', otherOwnerId, req.user.id);
-  }
+  await db.transaction(async (tx) => {
+    await tx.prepare(`DELETE FROM media WHERE owner_id = ? AND ('/api/media/' || id) IN (
+      SELECT photo FROM entries WHERE friendship_id = ? AND photo IS NOT NULL
+      UNION SELECT photo FROM moments WHERE friendship_id = ? AND photo IS NOT NULL
+      UNION SELECT ip.url FROM item_photos ip JOIN entries e ON e.id = ip.entry_id WHERE e.friendship_id = ?
+      UNION SELECT ip.url FROM item_photos ip JOIN moments m ON m.id = ip.moment_id WHERE m.friendship_id = ?
+    )`).run(req.user.id, f.id, f.id, f.id, f.id);
+    await tx.prepare(`DELETE FROM friendships WHERE id = ?`).run(f.id);
+    // Unlink the other side's row but keep their data intact.
+    if (otherOwnerId) {
+      await tx.prepare(`UPDATE friendships SET user_id = NULL, note = COALESCE(note,?) WHERE owner_id = ? AND user_id = ?`)
+        .run('They removed their side of the ledger.', otherOwnerId, req.user.id);
+    }
+  });
   res.json({ ok: true, removedOpenEntries: open.n });
 });
 
@@ -216,27 +280,45 @@ r.post('/link/:token/claim', async (req, res) => {
   if (link.owner_id === req.user.id) {
     return res.status(400).json({ error: 'self', message: 'That’s your own link.' });
   }
-  const mine = await mirrorFriendship(link.owner_id, link.friendship_id, req.user.id);
-  await db.prepare(`UPDATE links SET claimed_by = ?, claimed_at = ? WHERE id = ?`).run(req.user.id, now(), link.id);
+  let mine;
+  try {
+    mine = await db.transaction(async (tx) => {
+      const latest = await tx.prepare(`SELECT * FROM links WHERE id = ?`).get(link.id);
+      if (latest.claimed_by && latest.claimed_by !== req.user.id) {
+        const error = new Error('This personal invite has already been used by someone else.');
+        error.code = 'already_claimed';
+        throw error;
+      }
+      const updated = await tx.prepare(
+        `UPDATE links SET claimed_by = ?, claimed_at = COALESCE(claimed_at, ?) WHERE id = ? AND (claimed_by IS NULL OR claimed_by = ?)`,
+      ).run(req.user.id, now(), link.id, req.user.id);
+      if (updated.changes !== 1) {
+        const error = new Error('This personal invite has already been used.');
+        error.code = 'already_claimed';
+        throw error;
+      }
+      const friend = await mirrorFriendship(link.owner_id, link.friendship_id, req.user.id, tx, req.body?.friendshipId || null);
+      if (!friend) throw new Error('The linked person no longer exists.');
 
-  if (link.kind === 'entry' && link.entry_id) {
-    const e = await db.prepare(`SELECT * FROM entries WHERE id = ?`).get(link.entry_id);
-    if (e && e.status === 'open') {
-      await db.prepare(`UPDATE entries SET confirmed_at = ? WHERE id = ?`).run(now(), e.id);
-      await db.prepare(
-        `INSERT INTO events (id, user_id, friendship_id, entry_id, type, body, created_at) VALUES (?,?,?,?,?,?,?)`,
-      ).run(
-        newId('ev'),
-        link.owner_id,
-        e.friendship_id,
-        e.id,
-        'entry_confirmed',
-        `${mine.name} confirmed “${e.note || 'that entry'}”. No arguments.`,
-        now(),
-      );
+      if (link.kind === 'entry' && link.entry_id) {
+        const entry = await tx.prepare(`SELECT * FROM entries WHERE id = ?`).get(link.entry_id);
+        if (entry && entry.status === 'open' && !entry.confirmed_at) {
+          await tx.prepare(`UPDATE entries SET confirmed_at = ? WHERE id = ?`).run(now(), entry.id);
+          await tx.prepare(
+            `INSERT INTO events (id, user_id, friendship_id, entry_id, type, body, created_at) VALUES (?,?,?,?,?,?,?)`,
+          ).run(newId('ev'), link.owner_id, entry.friendship_id, entry.id, 'entry_confirmed', `${friend.name} confirmed “${entry.note || 'that entry'}”.`, now());
+        }
+      }
+      return friend;
+    });
+  } catch (error) {
+    if (error.code === 'already_claimed' || error.code === 'already_linked' || error.code === 'invalid_friend') {
+      return res.status(error.code === 'invalid_friend' ? 400 : 409).json({ error: error.code, message: error.message });
     }
+    throw error;
   }
 
+  await Promise.all([syncHonor(req.user.id), syncHonor(link.owner_id)]);
   const inviter = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(link.owner_id);
   res.json({ ok: true, inviter: await publicUser(inviter), friend: await decorate(mine) });
 });
@@ -261,6 +343,8 @@ export function hydrateEntry(e) {
     lastRemindAt: e.last_remind_at,
     pinned: !!e.pinned,
     photo: e.photo || null,
+    photos: e.photos || (e.photo ? [e.photo] : []),
+    ownedByMe: e.owned_by_me !== false,
     overdue: !!e.due_at && e.status === 'open' && e.due_at < now(),
     ageDays: Math.max(0, Math.floor((now() - e.created_at) / 86400000)),
   };

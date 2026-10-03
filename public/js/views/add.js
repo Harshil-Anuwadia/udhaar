@@ -3,7 +3,7 @@
    step 2 — the line (amount, direction, note; details tucked away)
    The primary action stays focused while each stage scrolls when required. */
 
-import { h, $, esc, buzz, symbol, withSymbol, avatarHTML, quickAmounts, noteSuggestions, daysBetween, formatDate, currencyCode, fileToDataUrl } from '../core/utils.js';
+import { h, $, esc, buzz, symbol, withSymbol, avatarHTML, quickAmounts, noteSuggestions, daysBetween, formatDate, currencyCode, formatMoneyInput, applyMoneyInput } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
 import { api } from '../core/api.js';
 import { state, bus } from '../core/store.js';
@@ -11,6 +11,7 @@ import { Sheet, hardCloseAllSheets } from '../ui/sheet.js';
 import { toast, toastOk, toastError } from '../ui/toast.js';
 import { navigate } from '../core/router.js';
 import { savedMomentCopy, moneyNotePrompt, sharedLineCopy } from '../core/voice.js';
+import { photoPicker } from '../ui/photo-picker.js';
 import { mount, hideChrome } from './view.js';
 import { openAddFriend } from './home.js';
 
@@ -20,14 +21,16 @@ const KINDS = [
   { id: 'gesture', label: 'Promise', icon: 'heart' },
 ];
 
-export async function viewAdd({ outlet, query }) {
+export async function viewAdd({ outlet, query, isCurrent = () => true }) {
   hardCloseAllSheets(); // idempotent: never stack two compose flows
   mount(outlet, 'app', () => `<div class="compose" id="compose"></div>`);
   outlet.querySelector('#compose')?.closest('.screen')?.classList.add('screen--compose');
   $('#main')?.classList.add('main--flush');
   hideChrome();
 
-  let friends = state.friends?.length ? state.friends : (await api.friends().then((r) => { state.friends = r.friends; return r.friends; }));
+  let friends = state.friends?.length ? state.friends : (await api.friends()).friends;
+  if (!isCurrent()) return;
+  state.friends = friends;
 
   if (!friends.length) {
     const sheet = new Sheet({
@@ -51,7 +54,7 @@ export async function viewAdd({ outlet, query }) {
     amount: '',
     note: '',
     dueAt: null,
-    photo: null,
+    photos: [],
   };
 
   const root = outlet.querySelector('#compose');
@@ -149,12 +152,10 @@ export async function viewAdd({ outlet, query }) {
     const label = h('label', { class: 'compose__amtlabel', for: amountId, text: `Amount (${cur})` });
     const input = h('input', {
       class: 'input num amount-entry__input', id: amountId, type: 'text', inputmode: 'numeric',
-      pattern: '[0-9]*', maxlength: 9, autocomplete: 'off', placeholder: '0',
-      value: draft.amount,
+      maxlength: 12, autocomplete: 'off', placeholder: '0',
+      value: formatMoneyInput(draft.amount, cur),
       oninput: (e) => {
-        const digits = e.target.value.replace(/\D/g, '').slice(0, 9);
-        draft.amount = digits ? String(Number(digits)) : '';
-        e.target.value = draft.amount;
+        draft.amount = applyMoneyInput(e.target, cur);
         syncSubmit();
       },
     });
@@ -167,7 +168,7 @@ export async function viewAdd({ outlet, query }) {
     for (const q of quickAmounts().slice(0, 4)) {
       quick.append(h('button', {
         class: 'quick', type: 'button', text: `+${symbol(cur)}${q}`,
-        onclick: () => { buzz(5); const next = (Number(draft.amount || 0) + q).toString(); if (next.length <= 9) { draft.amount = next; input.value = next; syncSubmit(); } },
+        onclick: () => { buzz(5); const next = (Number(draft.amount || 0) + q).toString(); if (next.length <= 9) { draft.amount = next; input.value = formatMoneyInput(next, cur); syncSubmit(); } },
       }));
     }
     c.append(quick);
@@ -189,8 +190,8 @@ export async function viewAdd({ outlet, query }) {
       onclick: () => openDetails('date'),
     }));
     more.append(h('button', {
-      class: 'chip', type: 'button', 'aria-pressed': String(!!draft.photo),
-      html: `${Icon.receipt}<span>${draft.photo ? 'photo added' : 'receipt'}</span>`,
+      class: 'chip', type: 'button', 'aria-pressed': String(draft.photos.length > 0),
+      html: `${Icon.receipt}<span>${draft.photos.length ? `${draft.photos.length} receipt ${draft.photos.length === 1 ? 'photo' : 'photos'}` : 'receipt photos'}</span>`,
       onclick: () => openDetails('receipt'),
     }));
     c.append(more);
@@ -233,15 +234,12 @@ export async function viewAdd({ outlet, query }) {
   /* ------------------------- details (due + photo) ---------------------- */
   function openDetails(first = 'date') {
     const body = h('div', { class: 'col', style: { gap: 'var(--s4)' } });
-    const paint = () => {
-      body.innerHTML = '';
-      const date = dueBlock(draft, paint);
-      const photo = photoBlock(draft, paint);
-      body.append(...(first === 'receipt' ? [photo, date] : [date, photo]));
+    const rerender = () => {
+      body.replaceChildren(first === 'receipt' ? photoBlock(draft) : dueBlock(draft, rerender));
     };
-    paint();
+    rerender();
     const done = h('button', { class: 'btn btn--primary btn--lg btn--block', type: 'button', text: 'Done', onclick: () => s.close() });
-    const s = new Sheet({ title: first === 'receipt' ? 'Add a receipt' : 'Add a date', sub: 'Optional details for this line.', body, footer: done, onClose: () => goStep(2, 'none') });
+    const s = new Sheet({ title: first === 'receipt' ? 'Add a receipt' : 'Set a due date', sub: first === 'receipt' ? 'Attach up to four receipt photos.' : 'Choose when this line is due.', body, footer: done, onClose: () => goStep(2, 'none') });
     s.open();
   }
 
@@ -310,7 +308,7 @@ async function commit(draft, friend, friends) {
     amount: draft.kind === 'money' ? Number(draft.amount) : 0,
     note: draft.note.trim(),
     dueAt: draft.dueAt,
-    photo: draft.photo || undefined,
+    photos: draft.photos,
   };
 
   try {
@@ -434,35 +432,14 @@ function dueBlock(draft, rerender) {
   return wrap;
 }
 
-/* --- receipt photo (native file picker; downscaled client-side) ----------- */
-function photoBlock(draft, rerender) {
-  const wrap = h('div', { class: 'col', style: { gap: 'var(--s2)' } });
-  wrap.append(h('div', { class: 'field__label', text: 'Receipt (optional)' }));
-  const row = h('div', { class: 'chiprow', style: { alignItems: 'center' } });
-  const input = h('input', {
-    id: 'receipt-photo-input', type: 'file', accept: 'image/jpeg,image/png,image/webp',
-    class: 'file-input', 'data-receipt-input': true,
-    onchange: async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      try {
-        draft.photo = await fileToDataUrl(file, 1280, 0.8);
-        buzz(8);
-        rerender();
-      } catch (err) { toastError(err.message); }
-    },
-  });
-  const btn = h('label', {
-    class: 'chip file-trigger', for: 'receipt-photo-input',
-    html: `${Icon.camera}<span>${draft.photo ? 'Replace photo' : 'Add photo'}</span>`,
-    onclick: () => buzz(5),
-  });
-  row.append(input, btn);
-  if (draft.photo) {
-    const thumb = h('span', { class: 'entry__photo entry__photo--lg', html: `<img src="${draft.photo}" alt="Receipt preview">` });
-    const rm = h('button', { class: 'chip', type: 'button', text: 'Remove', onclick: () => { draft.photo = null; rerender(); } });
-    row.append(thumb, rm);
-  }
-  wrap.append(row);
+/* --- receipt photos (native multi-select; downscaled client-side) ---------- */
+function photoBlock(draft) {
+  const wrap = h('div', { class: 'col', style: { gap: 'var(--s3)' } });
+  wrap.append(h('div', { class: 'field__label', text: 'Receipt photos · optional' }));
+  wrap.append(photoPicker({
+    id: 'receipt-photo-input', label: 'Choose receipt photos', photos: draft.photos,
+    onChange: (photos) => { draft.photos = photos; buzz(6); },
+    inputAttrs: { 'data-receipt-input': true },
+  }));
   return wrap;
 }

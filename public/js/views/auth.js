@@ -24,7 +24,7 @@ function shell(mode, query) {
 
     <section class="landing__copy" aria-labelledby="landing-title">
       <h1 id="landing-title">Who paid<br>last time?</h1>
-      <p>The cab, the split, the “I’ll send it later.” Keep track without searching the group chat.</p>
+      <p>The cab. The borrowed charger. The photos someone promised. Keep the little things between people in one place.</p>
     </section>
 
     <div class="landing__visual">${LandingPreview()}</div>
@@ -52,7 +52,7 @@ export function bindAuth(outlet, query) {
     buzz(6);
 
     if (act === 'signup') return openSignup(outlet, inviteToken, inviteCode);
-    if (act === 'login') return openLogin(outlet);
+    if (act === 'login') return openLogin(outlet, inviteToken);
     if (act === 'demo') return startDemo(outlet, btn);
   });
 
@@ -165,7 +165,7 @@ function openSignup(outlet, inviteToken, inviteCode = null) {
           inviteCode: m.querySelector('#su-code')?.value.trim() || inviteCode || '',
         });
         buzz([10, 40, 14]);
-        onSession(res, { invited: inviteToken });
+        await onSession(res, { invited: inviteToken });
       } catch (e) {
         btn.disabled = false;
         btn.textContent = 'Create my ledger';
@@ -183,8 +183,8 @@ function openSignup(outlet, inviteToken, inviteCode = null) {
 
 /* --------------------------------- login --------------------------------- */
 
-function openLogin(outlet) {
-  const land = () => mount(outlet, 'bare', () => shell('home', {}), (m) => bindAuth(m, {}));
+function openLogin(outlet, inviteToken = null) {
+  const land = () => mount(outlet, 'bare', () => shell('home', { join: inviteToken }), (m) => bindAuth(m, { join: inviteToken }));
   const d = { id: '' };
 
   const step1 = () => `
@@ -252,7 +252,7 @@ function openLogin(outlet) {
       try {
         const res = await api.login({ id: d.id, secret });
         buzz([10, 40, 14]);
-        onSession(res, {});
+        await onSession(res, { invited: inviteToken });
       } catch (e) {
         btn.disabled = false;
         btn.textContent = 'Sign in';
@@ -288,7 +288,7 @@ async function startDemo(outlet, btn) {
     res.user = me.user;
     buzz([10, 30, 10, 30, 18]);
     toast('Demo ledger loaded. Nothing in it is real.', { kind: 'ok' });
-    onSession(res, { demo: true });
+    await onSession(res, { demo: true });
   } catch (e) {
     btn.disabled = false;
     btn.textContent = original;
@@ -302,11 +302,20 @@ function stepperHTML(n, total = 2) {
 
 /* -------------------------------- helpers -------------------------------- */
 
-function onSession(res, opts = {}) {
+async function onSession(res, opts = {}) {
   setState({ user: res.user, theme: res.user.theme || 'system' });
   setCurrency(res.user.currency);
   document.documentElement.dataset.theme = res.user.theme || 'system';
   bus.emit('signed-in', res.user);
+  if (opts.invited) {
+    if (!res.user.onboarded) {
+      await api.onboarded();
+      const { user } = await api.me();
+      setState({ user });
+    }
+    navigate(`/join?token=${encodeURIComponent(opts.invited)}`, { replace: true });
+    return;
+  }
   if (!res.user.onboarded && !opts.demo) navigate('/onboard', { replace: true });
   else navigate('/', { replace: true });
 }

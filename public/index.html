@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5">
-  <title>udhaar — keep tabs, keep friends</title>
+  <title>udhaar — the little things between us</title>
 
   <meta name="description" content="The cab, the split, the 'I'll send it later.' Keep shared money, favours and promises in one place, without searching the group chat.">
-  <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#100E0B" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#F4F1E8">
+  <meta name="theme-color" content="#F6F3EC" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#15130F" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F6F3EC">
   <meta name="color-scheme" content="light dark">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -18,11 +18,11 @@
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="udhaar">
-  <meta property="og:title" content="udhaar — keep tabs, keep friends">
+  <meta property="og:title" content="udhaar — the little things between us">
   <meta property="og:description" content="For the cab, the split, and every 'I'll send it later.' A shared ledger without the group-chat maths.">
   <meta property="og:image" content="/og.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="udhaar — keep tabs, keep friends">
+  <meta name="twitter:title" content="udhaar — the little things between us">
   <meta name="twitter:description" content="Who paid last time? Keep the answer out of the group-chat scroll.">
   <meta name="twitter:image" content="/og.png">
 
@@ -43,7 +43,7 @@
     "@context": "https://schema.org",
     "@type": "WebApplication",
     "name": "udhaar",
-    "alternateName": "Udhaar — keep tabs, keep friends",
+    "alternateName": "Udhaar — the little things between us",
     "url": "/",
     "applicationCategory": "FinanceApplication",
     "operatingSystem": "Any",
@@ -54,14 +54,14 @@
 
   <style>
     /* First-paint shell so the app never flashes white on a mid-range Android. */
-    html { background: #F4F1E8; }
-    @media (prefers-color-scheme: dark) { html { background: #100E0B; } }
+    html { background: #F6F3EC; }
+    @media (prefers-color-scheme: dark) { html { background: #15130F; } }
     #boot {
       position: fixed; inset: 0; display: grid; place-items: center; z-index: 100;
-      background: #F4F1E8;
+      background: #F6F3EC;
       font-family: "Instrument Serif", Georgia, serif;
     }
-    @media (prefers-color-scheme: dark) { #boot { background: #100E0B; color: #F6F2E7; } }
+    @media (prefers-color-scheme: dark) { #boot { background: #15130F; color: #F6F1E8; } }
     #boot .w { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: clamp(2.4rem, 12vw, 3.2rem); letter-spacing: -0.045em; line-height: 1; animation: bootIn 620ms cubic-bezier(.16,1,.3,1) both; }
     #boot .w svg { width: 48px; height: 48px; flex: 0 0 auto; }
     #boot .w i { font-style: normal; color: #C4372A; }
@@ -70,6 +70,7 @@
     @media (prefers-reduced-motion: reduce) { #boot .w { animation: none; } }
     .bare-outlet { padding: 0 !important; }
   </style>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to your ledger</a>

@@ -7,6 +7,7 @@ let notFound = null;
 let current = null;
 let outlet = null;
 let guard = null;
+let renderGeneration = 0;
 
 export function defineRoutes(map) {
   for (const [pattern, handler] of Object.entries(map)) routes.set(pattern, handler);
@@ -87,13 +88,16 @@ function computeDir(path) {
 export const navDir = () => lastDir;
 export const resetNavStack = () => { navStack = []; };
 
-export async function render() {
+export async function render({ preserveScroll = false } = {}) {
   const path = currentPath();
+  const generation = ++renderGeneration;
+  const isCurrent = () => generation === renderGeneration && currentPath() === path;
   const found = match(path) || (notFound ? { handler: notFound, params: {}, pattern: '*' } : null);
   if (!found) return;
 
   if (guard) {
     const redirect = await guard(path, found);
+    if (!isCurrent()) return;
     if (redirect) return navigate(redirect, { replace: true });
   }
 
@@ -101,15 +105,23 @@ export async function render() {
   if (!outlet) outlet = $('#app');
 
   computeDir(path);
-  outlet.scrollTop = 0;
+  renderHook?.();
+  const previousScroll = preserveScroll ? document.querySelector('#main')?.scrollTop || 0 : 0;
+  if (!preserveScroll) outlet.scrollTop = 0;
   const mainEl = document.querySelector('#main');
-  if (mainEl) mainEl.scrollTop = 0;
-  window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+  const progress = document.querySelector('#routeLoading');
+  const loadingTimer = setTimeout(() => { if (isCurrent()) progress?.classList.remove('hide'); }, 180);
+  if (mainEl && !preserveScroll) mainEl.scrollTop = 0;
+  if (!preserveScroll) window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 
   try {
-    await found.handler({ params: found.params, query: currentQuery(), outlet, path });
-    renderHook?.();
+    await found.handler({ params: found.params, query: currentQuery(), outlet, path, isCurrent });
+    if (isCurrent()) {
+      if (preserveScroll && mainEl) mainEl.scrollTop = previousScroll;
+      renderHook?.();
+    }
   } catch (e) {
+    if (!isCurrent()) return;
     console.error('[route]', path, e);
     const target = document.querySelector('#main') || outlet;
     target.innerHTML = `
@@ -120,6 +132,9 @@ export async function render() {
         <button class="btn btn--primary" data-fix="home">Back to your ledger</button>
       </div>`;
     target.querySelector('[data-fix]')?.addEventListener('click', () => { location.hash = '#/'; });
+  } finally {
+    clearTimeout(loadingTimer);
+    if (isCurrent()) progress?.classList.add('hide');
   }
 }
 

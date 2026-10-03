@@ -23,8 +23,17 @@ export const FriendSchema = z.object({
   note: z.string().trim().max(120).optional().or(z.literal('')),
 });
 
+export const MomentSchema = z.object({
+  title: z.string().trim().min(1, 'Give this moment a few words').max(80),
+  note: z.string().trim().max(500).optional().or(z.literal('')),
+  occurredOn: z.iso.date().refine((date) => date <= new Date(Date.now() + 86400000).toISOString().slice(0, 10), 'Choose a day that has happened'),
+  photo: z.string().max(4_000_000).optional(),
+  photos: z.array(z.string().max(4_000_000)).max(4, 'Add up to four photos').optional(),
+});
+
 export const EntrySchema = z.object({
   photo: z.string().max(4_000_000).optional(),
+  photos: z.array(z.string().max(4_000_000)).max(4, 'Add up to four photos').optional(),
   friendshipId: z.string().min(3, 'Pick a person first'),
   kind: z.enum(['money', 'favor', 'gesture']),
   direction: z.enum(['owed_to_me', 'owed_by_me']),
@@ -55,8 +64,9 @@ export const ProfileSchema = z.object({
   name: z.string().trim().min(2).max(40).optional(),
   currency: z.enum(['INR', 'USD', 'GBP', 'EUR', 'AED', 'SGD', 'AUD', 'CAD']).optional(),
   theme: z.enum(['system', 'light', 'dark']).optional(),
-  // Demo-mode plan flip. In production this is written ONLY by a verified
-  // payment webhook (Razorpay/Stripe), never by a client request.
+  voiceMode: z.enum(['neutral', 'male', 'female']).optional(),
+  // Plus is a free preview until billing exists. Do not interpret this client
+  // setting as proof of payment if a paid plan is introduced later.
   plan: z.enum(['free', 'plus']).optional(),
 });
 

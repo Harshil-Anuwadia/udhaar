@@ -179,17 +179,28 @@ export function actionSheet({ title, sub, actions }) {
   const sheet = new Sheet({ title, sub, body: list });
   for (const a of actions) {
     const btn = h('button', {
-      class: 'setrow',
+      class: `setrow ${a.selected ? 'setrow--selected' : ''}`,
       type: 'button',
+      'aria-pressed': a.selected ? 'true' : 'false',
       style: a.danger ? 'color:var(--due)' : '',
-      onclick: () => { buzz(6); sheet.close(); a.onSelect?.(); },
+      onclick: async (event) => {
+        const selected = event.currentTarget;
+        if (selected.disabled) return;
+        selected.disabled = true;
+        selected.classList.add('is-working');
+        buzz(6);
+        try { await a.onSelect?.(); sheet.close(); }
+        catch (error) { console.error('[action]', error); }
+        finally { selected.disabled = false; selected.classList.remove('is-working'); }
+      },
     }, [
       a.icon ? h('span', { class: 'setrow__icon', html: a.icon, style: a.danger ? 'background:var(--due-bg);color:var(--due)' : '' }) : null,
       h('span', { class: 'grow' }, [
         h('span', { class: 'setrow__label', html: a.label }),
         a.hint ? h('span', { class: 'setrow__hint', html: a.hint }) : null,
       ]),
-      a.value ? h('span', { class: 'setrow__value', html: a.value }) : null,
+      a.selected ? h('span', { class: 'setrow__selected', 'aria-label': 'Current selection', text: '✓' })
+        : a.value ? h('span', { class: 'setrow__value', html: a.value }) : null,
     ]);
     list.append(btn);
   }
@@ -199,6 +210,7 @@ export function actionSheet({ title, sub, actions }) {
 /* --------------------------------- confirm -------------------------------- */
 
 export function confirmSheet({ title, body, confirmLabel = 'Do it', danger = false, onConfirm }) {
+  let busy = false;
   const sheet = new Sheet({
     title,
     body: `<p style="color:var(--ink-2);font-size:var(--fs-14);line-height:1.5">${body}</p>`,
@@ -207,7 +219,21 @@ export function confirmSheet({ title, body, confirmLabel = 'Do it', danger = fal
         class: `btn btn--block ${danger ? 'btn--due' : 'btn--primary'}`,
         type: 'button',
         text: confirmLabel,
-        onclick: () => { buzz([8, 30, 8]); sheet.close(); onConfirm?.(); },
+        onclick: async (event) => {
+          if (busy) return;
+          busy = true;
+          const button = event.currentTarget;
+          button.disabled = true;
+          button.innerHTML = '<span class="btn__spinner"></span> Working…';
+          buzz([8, 30, 8]);
+          try { await onConfirm?.(); sheet.close(); }
+          catch (error) {
+            busy = false;
+            button.disabled = false;
+            button.textContent = confirmLabel;
+            console.error('[confirm]', error);
+          }
+        },
       }),
       h('button', { class: 'btn btn--block btn--quiet', type: 'button', text: 'Cancel', onclick: () => sheet.close() }),
     ],

@@ -13,20 +13,26 @@ import { setCurrency } from './core/utils.js';
 
 /* ------------------------------- routes --------------------------------- */
 
+const lazyView = (modulePath, name) => async (ctx) => {
+  const module = await import(modulePath);
+  if (ctx.isCurrent()) return module[name](ctx);
+};
+
 const routes = {
-  '/': async (ctx) => (await import('./views/home.js')).viewHome(ctx),
-  '/add': async (ctx) => (await import('./views/add.js')).viewAdd(ctx),
-  '/friend/:id': async (ctx) => (await import('./views/friend.js')).viewFriend(ctx),
-  '/groups': async (ctx) => (await import('./views/groups.js')).viewGroups(ctx),
-  '/group/:id': async (ctx) => (await import('./views/groups.js')).viewGroup(ctx),
-  '/activity': async (ctx) => (await import('./views/activity.js')).viewActivity(ctx),
-  '/you': async (ctx) => (await import('./views/you.js')).viewYou(ctx),
-  '/plus': async (ctx) => (await import('./views/plus.js')).viewPlus(ctx),
-  '/onboard': async (ctx) => (await import('./views/onboard.js')).viewOnboard(ctx),
-  '/join': async (ctx) => (await import('./views/onboard.js')).viewJoin(ctx),
-  '/auth': async (ctx) => (await import('./views/auth.js')).viewAuth(ctx),
-  '/share': async () => {
+  '/': lazyView('./views/home.js', 'viewHome'),
+  '/add': lazyView('./views/add.js', 'viewAdd'),
+  '/friend/:id': lazyView('./views/friend.js', 'viewFriend'),
+  '/groups': lazyView('./views/groups.js', 'viewGroups'),
+  '/group/:id': lazyView('./views/groups.js', 'viewGroup'),
+  '/activity': lazyView('./views/activity.js', 'viewActivity'),
+  '/you': lazyView('./views/you.js', 'viewYou'),
+  '/plus': lazyView('./views/plus.js', 'viewPlus'),
+  '/onboard': lazyView('./views/onboard.js', 'viewOnboard'),
+  '/join': lazyView('./views/onboard.js', 'viewJoin'),
+  '/auth': lazyView('./views/auth.js', 'viewAuth'),
+  '/share': async (ctx) => {
     const { openShareCard } = await import('./views/share.js');
+    if (!ctx.isCurrent()) return;
     openShareCard();
     navigate('/');
   },
@@ -145,19 +151,24 @@ function softRefresh() {
 }
 
 async function pollUnread() {
-  if (!state.user) return setTimeout(pollUnread, 20000);
+  if (!state.user) return setTimeout(pollUnread, 12000);
   try {
     const { unread } = await api.events();
     const prev = state.unread;
     if (unread !== prev) {
       setState({ unread });
       syncChrome();
+      if (unread > prev && document.visibilityState === 'visible' &&
+          !['/auth', '/join', '/onboard', '/add'].includes(currentPath()) &&
+          !document.querySelector('.sheet.is-open')) {
+        await render({ preserveScroll: true });
+      }
       if (unread > prev && loadPrefs().nudges !== false) {
         notify('Udhaar', `${unread} new ${unread === 1 ? 'thing' : 'things'} in your ledger`);
       }
     }
   } catch {}
-  setTimeout(pollUnread, 45000);
+  setTimeout(pollUnread, document.visibilityState === 'visible' ? 12000 : 45000);
 }
 
 function notify(title, body) {
@@ -231,6 +242,7 @@ function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   window.addEventListener('load', () => {
     let refreshing = false;
+    let lastPromptedWorker = null;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (refreshing) return;
       refreshing = true;
@@ -240,18 +252,32 @@ function registerSW() {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
       .then((reg) => {
         const promptUpdate = (worker) => {
+          if (!worker || worker === lastPromptedWorker) return;
+          lastPromptedWorker = worker;
           toast('New version of Udhaar is ready.', {
             action: 'Reload',
-            duration: 10000,
+            duration: 30000,
             onAction: () => {
               worker?.postMessage('skip-waiting');
             },
           });
+          // If the user misses the toast, a later return to the app can show it again.
+          setTimeout(() => { if (lastPromptedWorker === worker) lastPromptedWorker = null; }, 30000);
+        };
+
+        const checkForUpdate = () => {
+          if (document.visibilityState === 'visible') reg.update().catch(() => {});
+          if (reg.waiting && navigator.serviceWorker.controller) promptUpdate(reg.waiting);
         };
 
         if (reg.waiting && navigator.serviceWorker.controller) {
           promptUpdate(reg.waiting);
         }
+
+        window.addEventListener('focus', checkForUpdate);
+        document.addEventListener('visibilitychange', checkForUpdate);
+        setInterval(checkForUpdate, 60 * 60 * 1000);
+        checkForUpdate();
 
         reg.addEventListener('updatefound', () => {
           const w = reg.installing;

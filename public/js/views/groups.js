@@ -1,6 +1,6 @@
 /* Groups: the Goa problem. One bill, many people, zero spreadsheets. */
 
-import { h, esc, buzz, money, symbol, withSymbol, relTime, avatarHTML, plural, shortMoney } from '../core/utils.js';
+import { h, esc, buzz, money, symbol, withSymbol, relTime, avatarHTML, plural, shortMoney, formatMoneyInput, applyMoneyInput } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
 import { Art } from '../ui/art.js';
 import { api } from '../core/api.js';
@@ -12,9 +12,9 @@ import { Sheet, confirmSheet } from '../ui/sheet.js';
 import { confetti } from '../ui/confetti.js';
 import { groupPosition } from '../core/group-position.js';
 
-const PALETTE = ['#8A5A44', '#5B6B8C', '#6E7B52', '#8C6E3F', '#7A5A80', '#4E7676', '#96564A', '#5F6E4E'];
+const PALETTE = ['#80614A', '#536482', '#63724E', '#806A47', '#795F79', '#4F7372', '#916157', '#626E53'];
 
-export async function viewGroups({ outlet }) {
+export async function viewGroups({ outlet, isCurrent = () => true }) {
   setHeader({ title: 'Groups', sub: 'The split, minus the chat maths' });
   showFab(false);
 
@@ -30,6 +30,7 @@ export async function viewGroups({ outlet }) {
   }
 
   const [groupsRes, friendsRes] = await Promise.all([api.groups(), api.friends()]);
+  if (!isCurrent()) return;
   setState({ groups: groupsRes.groups, friends: friendsRes.friends });
 
   const changed = !hadCache ||
@@ -75,14 +76,14 @@ function groupCard(g, i) {
   return `
   <button class="card groupcard anim-rise" style="text-align:left;animation-delay:${i * 50}ms" data-group="${g.id}">
     <div class="groupcard__top">
-      <span class="avatar avatar--48" style="background:linear-gradient(150deg,${color},${color}cc);border-radius:var(--r-md)"><span>${esc(g.name.slice(0, 2).toUpperCase())}</span></span>
+      <span class="avatar avatar--48" style="background:${color};border-radius:var(--r-md)"><span>${esc(g.name.slice(0, 2).toUpperCase())}</span></span>
       <span class="grow wrap">
         <span class="groupcard__name">${esc(g.name)}</span>
         <span class="groupcard__meta">${plural(g.members.length, 'person', 'people')} · ${plural(g.splits, 'split')}</span>
       </span>
       <span class="groupcard__position">
-        <b class="num ${position.state === 'outgoing' ? 'due-text' : position.state === 'settled' ? '' : 'credit-text'}">${position.state === 'settled' ? 'Square' : withSymbol(position.incoming || position.outgoing, cur)}</b>
-        <span class="tiny dim">${position.state === 'both' ? `also owe ${withSymbol(position.outgoing, cur)}` : position.state === 'incoming' ? 'coming to you' : position.state === 'outgoing' ? 'you owe' : 'all settled'}</span>
+        <b class="${g.splits && position.state !== 'settled' ? 'num' : ''} ${position.state === 'outgoing' ? 'due-text' : position.state === 'settled' || !g.splits ? '' : 'credit-text'}">${!g.splits ? 'Ready' : position.state === 'settled' ? 'Square' : withSymbol(position.incoming || position.outgoing, cur)}</b>
+        <span class="tiny dim">${!g.splits ? 'No splits yet' : position.state === 'both' ? `also owe ${withSymbol(position.outgoing, cur)}` : position.state === 'incoming' ? 'coming to you' : position.state === 'outgoing' ? 'you owe' : 'all settled'}</span>
       </span>
     </div>
 
@@ -100,6 +101,7 @@ function groupCard(g, i) {
           <span class="tiny num" style="width:62px;text-align:right;color:var(--credit)">${shortMoney(m.owes, cur)}</span>
         </div>`).join('')}
     </div>` : ''}
+    <span class="groupcard__open">Open group ${Icon.chevR}</span>
   </button>`;
 }
 
@@ -186,7 +188,7 @@ function openNewGroup(friends) {
 
 /* ----------------------------- group detail ------------------------------ */
 
-export async function viewGroup({ outlet, params }) {
+export async function viewGroup({ outlet, params, isCurrent = () => true }) {
   mount(outlet, 'app', () => `<div class="card skeleton" style="height:160px"></div><div class="card skeleton" style="height:240px"></div>`);
   setHeader({ title: 'Group', back: true });
   showFab(true);
@@ -194,11 +196,13 @@ export async function viewGroup({ outlet, params }) {
   let data;
   try { data = await api.group(params.id); }
   catch (e) {
+    if (!isCurrent()) return;
     return mount(outlet, 'app', () => `<div class="empty" style="padding-top:80px"><h3>Group not found</h3><p>${esc(e.message)}</p><a class="btn btn--primary" href="#/groups">Back</a></div>`);
   }
+  if (!isCurrent()) return;
 
   const { group, splits, entries } = data;
-  setHeader({ title: esc(group.name), sub: `${plural(group.members.length, 'person')}`, back: true });
+  setHeader({ title: esc(group.name), back: true });
 
   mount(outlet, 'app', () => groupDetailHTML(group, splits, entries), (main) => bindGroupDetail(main, group, splits, entries));
 }
@@ -210,7 +214,7 @@ function groupDetailHTML(g, splits, entries) {
   const max = Math.max(1, ...g.members.map((m) => Math.max(m.owes, m.isOwed)));
 
   return `
-  <section class="ledger-page anim-rise" style="padding:var(--s5) var(--s5) var(--s4) calc(var(--s5) + 14px)">
+  <section class="ledger-page anim-rise" style="padding:var(--s5) var(--s5) var(--s4)">
     <div class="netcard__label">Still to collect</div>
     <div class="netcard__amount" style="color:var(--credit)"><span class="cur">${symbol(cur)}</span>${money(owedToMe, cur)}</div>
     <p class="netcard__verdict">${iOwe ? `You also owe ${withSymbol(iOwe, cur)} in here.` : `Across ${plural(g.members.length, 'person')} and ${plural(splits.length, 'split')}.`}</p>
@@ -273,6 +277,7 @@ function groupDetailHTML(g, splits, entries) {
 
   <section class="anim-rise">
     <button class="btn btn--quiet btn--block small" data-act="archive" style="color:var(--ink-3)">Archive this group</button>
+    <button class="btn btn--quiet btn--block small" data-act="delete" style="color:var(--due)">Delete group</button>
   </section>`;
 }
 
@@ -295,6 +300,20 @@ function bindGroupDetail(main, g, splits, entries) {
       confirmLabel: 'Archive it',
       onConfirm: async () => { try { await api.updateGroup(g.id, { archived: true }); toastOk('Archived.'); navigate('/groups'); } catch (err) { toastError(err.message); } },
     });
+    if (a === 'delete') return confirmSheet({
+      title: `Delete ${esc(g.name)}?`,
+      body: 'The group and its bill breakdowns will go. Money already logged stays in each person’s ledger.',
+      confirmLabel: 'Delete group', danger: true,
+      onConfirm: async () => {
+        try {
+          await api.removeGroup(g.id);
+          setState({ groups: state.groups.filter((group) => group.id !== g.id) });
+          bus.emit('data-changed');
+          toastOk('Group deleted. Ledger lines kept.');
+          navigate('/groups');
+        } catch (error) { toastError(error.message); }
+      },
+    });
   });
 }
 
@@ -302,7 +321,7 @@ function openSplitDetail(s, g) {
   const cur = g.currency;
   const body = h('div', { class: 'col', style: { gap: 'var(--s3)' } });
   body.innerHTML = `
-    <div class="ledger-page" style="padding:var(--s5) var(--s5) var(--s5) calc(var(--s5) + 14px)">
+    <div class="ledger-page" style="padding:var(--s5)">
       <div class="netcard__label">${s.payerKind === 'me' ? 'You paid' : `${esc(s.payer?.name || 'They')} paid`}</div>
       <div class="netcard__amount" style="color:var(--ink)"><span class="cur">${symbol(cur)}</span>${money(s.amount, cur)}</div>
       <p class="small muted">${esc(s.title)} · ${relTime(s.createdAt)}</p>
@@ -358,7 +377,11 @@ function openMembers(g) {
           onclick: (ev) => { const on = ev.currentTarget.getAttribute('aria-pressed') === 'true'; ev.currentTarget.setAttribute('aria-pressed', String(!on)); on ? chosen.delete(f.id) : chosen.add(f.id); } }));
       }
       const s2 = new Sheet({ title: 'Add to group', body: pick, footer: h('button', { class: 'btn btn--primary btn--block', text: 'Add them', onclick: async () => {
-        try { await api.addMembers(g.id, [...chosen]); s2.close(); sheet.close(); toastOk('Added.'); bus.emit('data-changed'); navigate(`/group/${g.id}`); } catch (err) { toastError(err.message); }
+        const button = s2.footEl.querySelector('button');
+        if (!chosen.size) return toastError('Choose at least one person.');
+        button.disabled = true; button.innerHTML = '<span class="btn__spinner"></span> Adding…';
+        try { await api.addMembers(g.id, [...chosen]); s2.close(); sheet.close(); toastOk('Added.'); bus.emit('data-changed'); navigate(`/group/${g.id}`); }
+        catch (err) { button.disabled = false; button.textContent = 'Add them'; toastError(err.message); }
       } }) });
       s2.open();
     }
@@ -398,14 +421,11 @@ function openSplit(g) {
     const amt = h('div', { class: 'col', style: { gap: 'var(--s2)' } });
     const amountInput = h('input', {
       class: 'input num amount-entry__input', id: 'sp-amount', type: 'text', inputmode: 'numeric',
-      pattern: '[0-9]*', maxlength: 9, autocomplete: 'off', placeholder: '0', value: draft.amount,
+      maxlength: 12, autocomplete: 'off', placeholder: '0', value: formatMoneyInput(draft.amount, cur),
       oninput: (e) => {
-        const digits = e.target.value.replace(/\D/g, '').slice(0, 9);
-        draft.amount = digits ? String(Number(digits)) : '';
-        e.target.value = draft.amount;
+        draft.amount = applyMoneyInput(e.target, cur);
         sync();
       },
-      onchange: () => render(),
     });
     amt.append(
       h('label', { class: 'field__label', for: 'sp-amount', text: 'Total' }),
@@ -424,10 +444,10 @@ function openSplit(g) {
         class: 'chip', type: 'button', 'aria-pressed': String(draft.payer === 'friend' && draft.payerFriend === m.id),
         style: 'padding-left:5px;gap:7px',
         html: `${avatarHTML({ name: m.name, seed: m.seed ?? m.avatarSeed ?? m.avatar_seed, size: 24 })}<span>${esc(m.name)} paid</span>`,
-        onclick: () => { draft.payer = 'friend'; draft.payerFriend = m.id; buzz(6); render(); },
+        onclick: () => { draft.payer = 'friend'; draft.payerFriend = m.id; draft.included.add('me'); buzz(6); render(); },
       }));
     }
-    payerWrap.append(h('div', { class: 'field__label', text: 'Who paid' }), payerRow);
+    payerWrap.append(h('div', { class: 'field__label', text: 'Who paid?' }), payerRow);
     body.append(payerWrap);
 
     // Method + who's in
@@ -436,26 +456,44 @@ function openSplit(g) {
     for (const m of [{ id: 'equal', label: 'Equally' }, { id: 'custom', label: 'Custom' }]) {
       seg.append(h('button', { type: 'button', 'aria-pressed': String(draft.method === m.id), text: m.label, onclick: () => { draft.method = m.id; buzz(6); render(); } }));
     }
-    whoWrap.append(h('div', { class: 'field__label', text: 'Split between' }), seg);
+    whoWrap.append(h('div', { class: 'field__label', text: 'How should it split?' }), seg);
 
-    const list = h('div', { class: 'list', style: { padding: '4px' } });
+    const selectionHead = h('div', { class: 'split-selection__head' });
+    selectionHead.innerHTML = `<div><strong>Who was in it?</strong><p>Only checked people get a share.</p></div>
+      <span class="split-selection__count">${draft.included.size} of ${members.length} selected</span>`;
+    whoWrap.append(selectionHead);
+    const list = h('div', { class: 'split-selection__list' });
     const preview = previewShares();
     for (const m of members) {
       const inIt = draft.included.has(m.id);
       const share = preview.find((p) => p.id === m.id)?.amount ?? 0;
-      const row = h('div', { class: 'pick', style: inIt ? '' : 'opacity:.45' });
-      row.innerHTML = `${avatarHTML({ name: m.name, seed: m.seed ?? m.avatarSeed ?? m.avatar_seed, size: 32 })}
-        <span class="grow"><span class="pick__name" style="font-size:var(--fs-14)">${esc(m.name)}</span></span>
-        ${draft.method === 'custom' && inIt
-          ? `<input class="input num" style="min-height:38px;width:96px;text-align:right;padding:0 10px;font-size:var(--fs-14)" inputmode="numeric" value="${draft.custom.get(m.id) ?? share}" data-custom="${m.id}" aria-label="${esc(m.name)} share">`
-          : `<span class="num" style="font-weight:650;color:${inIt ? 'var(--due)' : 'var(--ink-4)'}">${inIt ? withSymbol(share, cur) : '—'}</span>`}
-        <span class="pick__check" style="opacity:1;color:${inIt ? 'var(--settled)' : 'var(--line-2)'}">${inIt ? Icon.checkCircle : Icon.close}</span>`;
-      row.addEventListener('click', (e) => {
-        if (e.target.closest('[data-custom]')) return;
+      const fixedMe = m.id === 'me' && draft.payer === 'friend';
+      const row = h('div', { class: `split-person ${inIt ? 'is-selected' : ''}` });
+      const checkboxId = `split-member-${m.id}`;
+      const label = h('label', { class: 'split-person__label', for: checkboxId });
+      const checkbox = h('input', {
+        type: 'checkbox', id: checkboxId, class: 'split-person__check', 'data-split-member': m.id,
+        'aria-label': `Include ${m.name} in this bill`, checked: inIt,
+        disabled: fixedMe,
+      });
+      checkbox.addEventListener('change', () => {
         buzz(5);
-        inIt ? draft.included.delete(m.id) : draft.included.add(m.id);
+        checkbox.checked ? draft.included.add(m.id) : draft.included.delete(m.id);
         render();
       });
+      label.append(h('span', { class: 'split-person__avatar', html: avatarHTML({ name: m.name, seed: m.seed ?? m.avatarSeed ?? m.avatar_seed, size: 32 }) }));
+      label.append(h('span', { class: 'split-person__name', html: `<strong>${esc(m.name)}</strong>${fixedMe ? '<small>Included when someone else paid</small>' : ''}` }));
+      row.append(label);
+      if (draft.method === 'custom' && inIt) {
+        row.append(h('input', {
+          class: 'input num split-person__amount', type: 'text', inputmode: 'numeric',
+          value: formatMoneyInput(draft.custom.get(m.id) ?? share, cur), 'data-custom': m.id,
+          'aria-label': `${m.name} share`,
+        }));
+      } else {
+        row.append(h('span', { class: 'split-person__share num', 'data-split-share': m.id, text: inIt ? withSymbol(share, cur) : 'Not included' }));
+      }
+      row.append(checkbox);
       list.append(row);
     }
     whoWrap.append(list);
@@ -464,26 +502,12 @@ function openSplit(g) {
     // Custom inputs
     if (draft.method === 'custom') {
       body.querySelectorAll('[data-custom]').forEach((inp) => inp.addEventListener('input', (e) => {
-        draft.custom.set(e.target.dataset.custom, Number(e.target.value.replace(/[^\d]/g, '')) || 0);
+        draft.custom.set(e.target.dataset.custom, Number(applyMoneyInput(e.target, cur)) || 0);
         sync();
       }));
     }
 
-    // Summary
-    const total = Number(draft.amount) || 0;
-    const sumShares = preview.reduce((s, p) => s + p.amount, 0);
-    const mismatch = draft.method === 'custom' && total > 0 && sumShares !== total;
-    const myShare = preview.find((p) => p.id === 'me')?.amount ?? 0;
-    const inIt = draft.included.has('me');
-    const payerFriendName = draft.payer === 'friend' ? (friends.find((f) => f.id === draft.payerFriend)?.name || 'them') : null;
-    const expl = !total ? '' : mismatch ? '' : draft.payer === 'me'
-      ? (inIt && myShare ? `<p class="tiny muted" style="margin-top:4px">Your part is ${withSymbol(myShare, cur)} — no line for it, it’s simply yours. Friends’ shares land in their ledgers.</p>` : `<p class="tiny muted" style="margin-top:4px">You’re not in this one — friends cover the whole bill.</p>`)
-      : (inIt && myShare ? `<p class="tiny muted" style="margin-top:4px">Your part (${withSymbol(myShare, cur)}) becomes one line: you owe ${esc(payerFriendName)}. The rest is between them.</p>` : `<p class="tiny muted" style="margin-top:4px">You’re not in this split, so nothing lands in your book.</p>`);
-    body.append(h('div', {
-      class: 'card', style: `padding:var(--s3) var(--s4);background:${mismatch ? 'var(--due-bg)' : 'var(--surface-2)'}`,
-      html: `<div class="row-between"><span class="small muted">Shares add up to</span><b class="num ${mismatch ? 'due-text' : ''}">${withSymbol(sumShares, cur)}</b></div>
-        ${mismatch ? `<p class="tiny" style="color:var(--due-ink);margin-top:4px">${withSymbol(total - sumShares, cur)} unaccounted for. Fix it before splitting.</p>` : expl}`,
-    }));
+    body.append(h('div', { class: 'split-summary', 'data-summary': true, 'aria-live': 'polite' }));
 
     sync();
   }
@@ -503,13 +527,32 @@ function openSplit(g) {
   function sync() {
     const total = Number(draft.amount) || 0;
     const shares = previewShares();
+    for (const share of shares) {
+      const amount = body.querySelector(`[data-split-share="${share.id}"]`);
+      if (amount) amount.textContent = withSymbol(share.amount, cur);
+    }
     const sum = shares.reduce((s, p) => s + p.amount, 0);
     const meIn = draft.included.has('me');
     const payerFriendWithoutMe = draft.payer === 'friend' && !meIn;
     const ok = draft.title.trim() && total > 0 && shares.length > 0 && !payerFriendWithoutMe && (draft.method === 'equal' || sum === total);
+    const summary = body.querySelector('[data-summary]');
+    if (summary) {
+      const mismatch = draft.method === 'custom' && total > 0 && sum !== total;
+      const myShare = shares.find((share) => share.id === 'me')?.amount ?? 0;
+      const payerName = friends.find((friend) => friend.id === draft.payerFriend)?.name || 'them';
+      summary.classList.toggle('is-mismatch', mismatch);
+      summary.innerHTML = `<div><span>Shares add up to</span><strong class="num">${withSymbol(sum, cur)}</strong></div>
+        ${mismatch ? `<p>${withSymbol(Math.abs(total - sum), cur)} ${sum > total ? 'over the total' : 'left to assign'}.</p>`
+          : total && draft.payer === 'me' && myShare ? `<p>Your ${withSymbol(myShare, cur)} part stays yours. Everyone else gets their own line.</p>`
+          : total && draft.payer === 'friend' ? `<p>Your ${withSymbol(myShare, cur)} part is owed to ${esc(payerName)}.</p>` : ''}`;
+    }
     go.disabled = !ok;
     if (payerFriendWithoutMe) {
       go.textContent = 'Include yourself when a friend pays';
+    } else if (draft.method === 'custom' && total > 0 && shares.length && sum !== total) {
+      go.textContent = sum < total
+        ? `Assign ${withSymbol(total - sum, cur)} more`
+        : `Reduce by ${withSymbol(sum - total, cur)}`;
     } else {
       go.textContent = shares.length ? `Split ${withSymbol(total, cur)} across ${shares.length}` : 'Split it';
     }
@@ -538,15 +581,30 @@ function openSplit(g) {
       buzz([12, 40, 16]);
       confetti({ count: 26, originY: 0.5 });
       sheet.close();
-      const mine = meShareAmt;
-      toastOk(draft.payer === 'me'
-        ? `Split saved — ${plural(friendShares.length, 'friend now owes', 'friends now owe')} you their part.`
-        : `Split saved — your ${withSymbol(mine, cur)} part is logged as owed to ${esc(friends.find((f) => f.id === draft.payerFriend)?.name || 'them')}.`);
       bus.emit('data-changed');
       navigate(`/group/${g.id}`);
+      showSavedBill(g, draft, friendShares.length, meShareAmt);
     } catch (e) {
       go.disabled = false; sync();
       toastError(e.message);
     }
   };
+}
+
+function showSavedBill(group, bill, friendCount, myShare) {
+  const cur = group.currency || 'INR';
+  const note = bill.payer === 'me'
+    ? friendCount ? `${plural(friendCount, 'friend has', 'friends have')} a clear share in the ledger.` : 'Your part is recorded in this group.'
+    : `Your ${withSymbol(myShare, cur)} share is in the ledger.`;
+  const body = h('div', { class: 'saved-moment', role: 'status', 'aria-live': 'polite' });
+  body.innerHTML = `<div class="saved-moment__hero"><h2>Bill, sorted.</h2><p class="saved-moment__aside">${esc(note)}</p></div>
+    <div class="saved-moment__inkline" aria-hidden="true"></div>
+    <div class="saved-moment__line"><div class="saved-moment__linehead"><span>${esc(group.name)}</span><span>${esc(bill.method === 'equal' ? 'Equal split' : 'Custom split')}</span></div>
+    <div class="saved-moment__value">${withSymbol(Number(bill.amount), cur)}</div><p class="saved-moment__note">${esc(bill.title)}</p>
+    <div class="saved-moment__linefoot"><span>Saved to group</span><span>${plural(bill.included.size, 'share')}</span></div></div>`;
+  const done = h('button', { class: 'btn btn--primary btn--block btn--lg', type: 'button', text: 'Back to group' });
+  const sheet = new Sheet({ title: 'Bill saved', body, footer: done });
+  sheet.el.classList.add('sheet--saved');
+  done.onclick = () => sheet.close();
+  sheet.open();
 }

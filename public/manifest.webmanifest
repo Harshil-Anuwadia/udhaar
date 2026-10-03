@@ -1,5 +1,5 @@
 {
-  "name": "udhaar \u2014 keep tabs, keep friends",
+  "name": "udhaar \u2014 the little things between us",
   "short_name": "udhaar",
   "description": "The cab, the split, the 'I'll send it later.' Keep your shared tabs together, without searching the group chat.",
   "id": "/",
@@ -10,9 +10,8 @@
     "standalone",
     "minimal-ui"
   ],
-  "orientation": "portrait-primary",
-  "background_color": "#F4F1E8",
-  "theme_color": "#F4F1E8",
+  "background_color": "#F6F3EC",
+  "theme_color": "#F6F3EC",
   "categories": [
     "finance",
     "social",
@@ -45,8 +44,8 @@
       ]
     },
     {
-      "name": "Reliability score",
-      "short_name": "Score",
+      "name": "My account",
+      "short_name": "Account",
       "url": "/#/you",
       "icons": [
         {

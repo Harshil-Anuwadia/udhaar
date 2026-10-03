@@ -1,11 +1,11 @@
 /* Udhaar service worker
-   - App shell: precached, offline-first, stale-while-revalidate
-   - API GETs: network-first with a cache fallback so the ledger still opens
-     on a train through a tunnel.
+   - App shell: precached for offline fallback, network-first while online.
+   - API GETs: network-only. Private ledger responses must not be shared by
+     the browser cache across sign-ins on the same device.
    - API writes: never intercepted; the app layer queues them instead.
 */
 
-const VERSION = 'v1.14.2';
+const VERSION = 'v1.19.1';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -35,6 +35,7 @@ const SHELL_ASSETS = [
   '/js/ui/art.js',
   '/js/ui/brand.js',
   '/js/ui/lightbox.js',
+  '/js/ui/photo-picker.js',
   '/js/ui/sharecard.js',
   '/js/views/add.js',
   '/js/views/art.js',
@@ -62,7 +63,8 @@ self.addEventListener('install', (event) => {
       .then((c) => c.addAll(SHELL_ASSETS).catch(() => {
         // Non-fatal: cache whatever we can, one by one.
         return Promise.allSettled(SHELL_ASSETS.map((u) => c.add(u).catch(() => {})));
-      })),
+      }))
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -87,42 +89,30 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // API reads: network first, cache fallback (never serve stale writes).
+  // Never cache private API data or photos. An offline read gets a clear error.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request)
-        .then((res) => {
-          if (res.ok && request.headers.get('authorization')) {
-            const copy = res.clone();
-            caches.open(RUNTIME).then((c) => c.put(request, copy));
-          }
-          return res;
-        })
-        .catch(async () => {
-          const cached = await caches.match(request);
-          if (cached) return cached;
-          return new Response(JSON.stringify({ error: 'offline', message: 'You’re offline.' }), {
+        .catch(() => new Response(JSON.stringify({ error: 'offline', message: 'You’re offline.' }), {
             status: 503,
             headers: { 'Content-Type': 'application/json' },
-          });
-        }),
+          })),
     );
     return;
   }
 
-  // Navigation: shell, always.
+  // Navigation: current page online, cached shell only when offline.
   if (isNav(request)) {
     event.respondWith(
-      caches.match('/index.html').then((hit) => hit || fetch(request).catch(() => caches.match('/')))
+      fetch(request).catch(() => caches.match('/index.html'))
         .then((res) => res || new Response('Offline', { status: 503 })),
     );
     return;
   }
 
-  // Everything else: stale-while-revalidate.
+  // Static assets: never serve an outdated cached bundle while online.
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
+    fetch(request)
         .then((res) => {
           if (res && (res.ok || res.type === 'opaque')) {
             const copy = res.clone();
@@ -130,8 +120,6 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => cached);
-      return cached || network;
-    }),
+        .catch(() => caches.match(request)),
   );
 });

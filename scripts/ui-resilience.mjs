@@ -131,7 +131,7 @@ try {
   assert.equal(receiptInput.capture, null, 'receipt picker must allow gallery and file selection');
   await page.setInputFiles(receiptPicker, { name: 'receipt.png', mimeType: 'image/png', buffer: PNG });
   await page.waitForSelector('.entry__photo--lg img');
-  await page.locator('.sheet__foot .btn').click();
+  await page.locator('.sheet.is-open .sheet__foot .btn').click();
   await page.locator('.compose__foot .btn').click();
   await page.waitForSelector('.sheet--saved .saved-moment__line', { timeout: 20_000 });
   await page.getByRole('button', { name: 'Back to ledger' }).click();
@@ -228,7 +228,7 @@ try {
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${SHOTS}/group-bill-narrow.png` });
   }
-  await page.locator('.sheet__foot .btn').click();
+  await page.locator('.sheet.is-open .sheet__foot .btn').click();
   await page.waitForSelector('[data-split]', { timeout: 20_000 });
 
   assert.deepEqual(browserErrors, [], `browser errors: ${browserErrors.join('\n')}`);

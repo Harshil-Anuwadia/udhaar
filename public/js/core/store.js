@@ -91,7 +91,7 @@ export function applyTheme(theme) {
   const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   rootEl.dataset.effective = dark ? 'dark' : 'light';
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = dark ? '#100E0B' : '#F5F2E9';
+  if (meta) meta.content = dark ? '#15130F' : '#F6F3EC';
   savePrefs({ theme });
 }
 

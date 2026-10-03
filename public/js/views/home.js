@@ -1,6 +1,6 @@
 /* Home: the net position, the people, the entries. */
 
-import { h, esc, buzz, money, symbol, withSymbol, relTime, dueLabel, shortMoney, avatarHTML, plural, clamp, currencyCode } from '../core/utils.js';
+import { h, $, esc, buzz, money, symbol, withSymbol, relTime, dueLabel, shortMoney, avatarHTML, plural, clamp, currencyCode } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
 import { Art } from '../ui/art.js';
 import { BrandMark } from '../ui/brand.js';
@@ -18,9 +18,9 @@ import { homeVerdict } from '../core/voice.js';
 
 const KIND_ICON = { money: 'rupee', favor: 'hands', gesture: 'heart' };
 
-export async function viewHome({ outlet }) {
+export async function viewHome({ outlet, isCurrent = () => true }) {
   setHeader({
-    title: `<span class="brand-header">${BrandMark()}<span>udhaar<span style="color:var(--due)">.</span></span></span>`,
+    title: `<span class="brand-header">${BrandMark()}<span>udhaar<span style="color:var(--due)">.</span></span></span><span class="desktop-home-title">Ledger</span>`,
     actions: [
       { label: 'Share my ledger', icon: Icon.share, onClick: () => openShareCard() },
       { label: 'Settings', icon: Icon.settings, onClick: () => navigate('/you') },
@@ -41,6 +41,7 @@ export async function viewHome({ outlet }) {
 
   // Fetch fresh data in background
   const [friendsRes, statsRes] = await Promise.all([api.friends(), api.stats()]);
+  if (!isCurrent()) return;
   setState({ friends: friendsRes.friends, stats: statsRes });
 
   const changed = !hadCache ||
@@ -70,27 +71,28 @@ function homeHTML({ friends }, stats) {
   const positive = net > 0;
   const zero = net === 0;
 
-  const verdict = homeVerdict({ net, friends: t.friends, seed: state.user?.id || 'ledger' });
+  const unresolved = t.openEntries + (t.disputedEntries || 0);
+  const verdict = homeVerdict({ net, friends: t.friends, openEntries: unresolved, seed: state.user?.id || 'ledger' });
 
-  const stamp = zero ? 'Settled' : positive ? 'In your favour' : 'You owe';
-  const stampColor = zero ? 'var(--settled)' : positive ? 'var(--credit)' : 'var(--due)';
+  const stamp = zero ? (unresolved ? 'Still in the book' : 'All square') : positive ? 'In your favour' : 'You owe';
+  const stampColor = zero ? (unresolved ? 'var(--ink-2)' : 'var(--settled)') : positive ? 'var(--credit)' : 'var(--due)';
 
   const people = [...friends]
-    .filter((f) => f.net !== 0 || f.openCount > 0)
+    .filter((f) => f.net !== 0 || f.openCount > 0 || f.disputedCount > 0)
     .sort((a, b) => Math.abs(b.net) - Math.abs(a.net) || b.openCount - a.openCount);
 
-  const rest = friends.filter((f) => !(f.net !== 0 || f.openCount > 0));
+  const rest = friends.filter((f) => !(f.net !== 0 || f.openCount > 0 || f.disputedCount > 0));
 
 
   return `
   ${state.user?.isDemo ? '<span class="tag tag--warn demo-indicator">Preview ledger · sample data</span>' : ''}
   <div class="home-actions anim-rise" aria-label="Ledger actions">
-    <button class="btn btn--primary" data-act="record">${Icon.plus} Log something</button>
+    <button class="btn btn--primary" data-act="record">${Icon.plus} Add a line</button>
     <button class="btn btn--outline" data-act="addfriend">${Icon.people} Add a person</button>
   </div>
   <section class="ledger-page netcard anim-rise" aria-label="Your net position">
     <div class="netcard__stamp" style="color:${stampColor}">${stamp}</div>
-    <div class="netcard__label">Net position</div>
+    <div class="netcard__label">Money between people</div>
     <div class="netcard__amount" style="color:${zero ? 'var(--ink)' : positive ? 'var(--credit)' : 'var(--due)'}">
       <span class="cur">${symbol(cur)}</span><span class="num" data-count="${Math.abs(net)}">${money(Math.abs(net), cur)}</span>
     </div>
@@ -117,7 +119,7 @@ function homeHTML({ friends }, stats) {
 
   <section style="animation-delay:120ms" class="anim-rise">
     <div class="section-head">
-      <h2>${people.length ? 'Your people' : 'No people yet'}</h2>
+      <h2>${people.length ? 'Open with your people' : 'No people yet'}</h2>
     </div>
 
     ${people.length ? `<div class="list" id="peopleList">
@@ -152,7 +154,7 @@ function emptyPeople(hasFriends) {
       <p>${hasFriends
         ? 'No open balances. The next cab or coffee can go here when it happens.'
         : 'You know the friend who says “I’ll send it later.” Add them now; sort the details later.'}</p>
-      <button class="btn btn--primary" data-act="${hasFriends ? 'record' : 'addfriend'}">${hasFriends ? 'Log something' : 'Add your first person'}</button>
+      <button class="btn btn--primary" data-act="${hasFriends ? 'record' : 'addfriend'}">${hasFriends ? 'Add a line' : 'Add your first person'}</button>
     </div>
   </div>`;
 }
@@ -161,7 +163,7 @@ function personRow(f, cur, square = false) {
   const positive = f.net > 0;
   const amt = f.net === 0 ? '' : withSymbol(Math.abs(f.net), cur);
   const label = f.net === 0
-    ? (f.openCount ? `${f.openCount} open` : 'square')
+    ? (f.openCount ? `${f.openCount} open` : f.disputedCount ? `${f.disputedCount} questioned` : 'square')
     : positive ? 'owes you' : 'you owe';
   const meta = f.lastEntry?.note || (f.lastEntry ? kindWord(f.lastEntry.kind) : f.note || 'no entries yet');
   const time = f.lastEntry ? relTime(f.lastEntry.created_at) : '';
@@ -241,14 +243,9 @@ export function openAddFriend({ onAdded } = {}) {
       <input class="input" id="af-name" placeholder="Roomie, bestie, Arjun…" maxlength="40" autocomplete="off" data-autofocus>
       <span class="field__error" id="err-af-name"></span>
     </div>
-    <div class="field">
-      <label class="field__label" for="af-handle">Their udhaar handle <span class="dim" style="text-transform:none;font-weight:500">(optional)</span></label>
-      <input class="input" id="af-handle" placeholder="@arjun" autocapitalize="none" autocorrect="off" spellcheck="false">
-      <p class="tiny dim" style="margin-top:2px">Already on udhaar? Your ledgers will link.</p>
-    </div>
     <div class="card" style="padding:var(--s3) var(--s4);display:flex;gap:var(--s3);align-items:flex-start;background:var(--surface-2)">
       <span style="color:var(--gold);flex:0 0 auto;margin-top:1px">${Icon.info}</span>
-      <p class="tiny" style="color:var(--ink-2);line-height:1.5">They don’t need an account. Keep this on your side, or share a link when you’re ready.</p>
+      <p class="tiny" style="color:var(--ink-2);line-height:1.5">Add them privately now. Send their personal link when you want the ledger to appear on both phones.</p>
     </div>
   `;
 
@@ -257,8 +254,6 @@ export function openAddFriend({ onAdded } = {}) {
   sheet.open();
 
   const nameEl = form.querySelector('#af-name');
-  const handleEl = form.querySelector('#af-handle');
-  handleEl.addEventListener('input', () => { handleEl.value = handleEl.value.toLowerCase().replace(/[^a-z0-9_.]/g, '').replace(/^@/, ''); });
 
   async function go() {
     const name = nameEl.value.trim();
@@ -270,14 +265,14 @@ export function openAddFriend({ onAdded } = {}) {
     submit.disabled = true;
     submit.innerHTML = '<span class="btn__spinner"></span> Adding…';
     try {
-      const res = await api.addFriend({ name, handle: handleEl.value.trim(), note: '' });
+      const res = await api.addFriend({ name, note: '' });
       buzz([8, 30, 10]);
       sheet.close();
       toastOk(`${res.friend.name} is in the book.`);
+      setState({ friends: [res.friend, ...state.friends.filter((friend) => friend.id !== res.friend.id)] });
       bus.emit('data-changed');
-      onAdded?.(res.friend);
-      // Immediately offer to log something — this is the retention moment.
-      setTimeout(() => openRecord({ friendshipId: res.friend.id }), 320);
+      if (onAdded) onAdded(res.friend);
+      else navigate(`/friend/${res.friend.id}`);
     } catch (e) {
       submit.disabled = false;
       submit.textContent = 'Add to my book';
@@ -316,42 +311,25 @@ export async function openInvite(friends) {
       <div class="card" style="padding:var(--s3) var(--s4);display:flex;align-items:center;gap:var(--s3)">
         <div class="grow wrap">
           <b class="small">${esc(l.name)}</b>
-          <div class="tiny dim truncate" style="font-family:var(--font-mono)">${l.claimed ? 'already joined · resend anyway' : url.replace(origin, '')}</div>
+          <div class="tiny dim truncate" style="font-family:var(--font-mono)">${l.claimed ? 'Connected · only their account can use this link' : url.replace(origin, '')}</div>
         </div>
         <button class="iconbtn" data-copy="${esc(url)}" aria-label="Copy link for ${esc(l.name)}">${Icon.copy}</button>
-        <button class="btn btn--sm btn--primary" data-wa="${esc(url)}" data-name="${esc(l.name)}">Send</button>
+        <button class="btn btn--sm btn--primary" data-wa="${esc(url)}" data-name="${esc(l.name)}">${l.claimed ? 'Resend' : 'Send'}</button>
       </div>`;
     }).join('');
 
     sheet.setBody(`
       <div class="col" style="gap:var(--s3)">
         <div class="card" style="padding:var(--s4);background:var(--surface-2)">
-          <b class="small">Your handle</b>
-          <p class="tiny muted" style="margin:4px 0 10px">Share <b class="num" style="color:var(--ink)">@${esc(state.user?.handle || 'you')}</b>. When they add you, both ledgers link.</p>
-          <div class="row" style="gap:var(--s2)">
-            <button class="btn btn--sm btn--outline grow" data-copy="@${esc(state.user?.handle || '')}">${Icon.copy} Copy handle</button>
-            <button class="btn btn--sm btn--primary grow" data-code>${Icon.gift} Invite code</button>
-          </div>
-          <p class="tiny dim" style="margin-top:8px" id="codeOut"></p>
+          <b class="small">One link for each person</b>
+          <p class="tiny muted" style="margin-top:4px">Send their personal link below. Once they accept it, past and new lines appear in both ledgers.</p>
         </div>
-        <div class="section-head" style="margin:0"><h2>Personal links</h2><span class="tiny dim">one for each person</span></div>
+        <div class="section-head" style="margin:0"><h2>Personal links</h2><span class="tiny dim">private until accepted</span></div>
         ${list || '<p class="small muted center">Add a person first, then send them their side of the book.</p>'}
       </div>
     `);
 
     sheet.bodyEl.addEventListener('click', async (e) => {
-      const codeBtn = e.target.closest('[data-code]');
-      if (codeBtn) {
-        codeBtn.disabled = true;
-        try {
-          const { code } = await api.makeCode();
-          const out = sheet.bodyEl.querySelector('#codeOut');
-          if (out) out.innerHTML = `Code <b class="num">${esc(code)}</b> — they paste it at signup and land in your book.`;
-          buzz([8, 20, 8]);
-        } catch (err) { toastError(err.message); }
-        codeBtn.disabled = false;
-        return;
-      }
       const copyBtn = e.target.closest('[data-copy]');
       const waBtn = e.target.closest('[data-wa]');
       if (copyBtn) {
@@ -392,7 +370,7 @@ async function openOverdue() {
     const onYou = late.filter((e) => e.direction === 'owed_by_me');
     const row = (e, tag) => `
           <button class="entry" data-open="${e.friend.id}">
-            <span class="entry__mark entry__mark--due">${Icon[KIND_ICON[e.kind]]}</span>
+            <span class="entry__mark entry__mark--due">${e.kind === 'money' ? Icon.money : Icon[KIND_ICON[e.kind]]}</span>
             <span class="grow wrap">
               <span class="entry__note">${esc(e.note || kindWord(e.kind))}${tag ? ` <span class="tag tag--gold" style="padding:1px 6px">${tag}</span>` : ''}</span>
               <span class="entry__meta"><b style="color:var(--due)">${esc(dueLabel(e.dueAt))}</b> · ${esc(e.friend.name)}</span>

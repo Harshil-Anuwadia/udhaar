@@ -26,6 +26,17 @@
 .sheet--saved.is-open .saved-moment__line { animation: saved-line 500ms var(--ease-out) 260ms both; }
 .onboard__art { margin: 0; }
 .onboard__art .art { width: 160px; }
+@media (max-height: 650px) {
+  .onboard { gap: 10px; }
+  .onboard__art .art { width: 96px; }
+  .onboard--person .onboard__art, .onboard--first .onboard__art { display: none; }
+  .onboard__actions { gap: 4px; padding-top: 8px; padding-bottom: calc(8px + var(--safe-b)); }
+  .onboard--first .onboard__person-card { padding-block: 10px; }
+  .onboard--first .onboard__first-line { padding-top: 12px; padding-bottom: 12px; margin-top: 0; }
+}
+@media (max-height: 520px) {
+  .onboard__art .art { width: 72px; }
+}
 .empty__art { width: 128px; height: 96px; opacity: 1; }
 .empty__art.empty__art--icon { width: 56px; height: 56px; }
 .empty__art.empty__art--icon svg { width: 36px; height: 36px; }
@@ -60,8 +71,9 @@
   .btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: var(--e1); }
   .btn:not(:disabled):hover svg { transform: translateY(-1px); }
   .iconbtn:hover, .setrow:hover, .account-quick__action:hover, .person:hover, .pick:hover { background-color: var(--surface-2); }
+  .authstep__back:hover, .dirbtn:hover, .plan:not([aria-pressed="true"]):hover, .snapshot-privacy:hover { background-color: var(--surface-2); border-color: var(--line-2); }
   .setrow:hover .setrow__icon svg { transform: scale(1.08); }
-  .who:hover { border-color: var(--credit); background: var(--credit-bg); transform: translateY(-2px); }
+  .who:hover { border-color: var(--line-2); background: var(--surface-2); transform: translateY(-1px); }
   .quick:hover { border-color: var(--ink-3); background: var(--surface); }
   .avatarbtn:hover .avatarbtn__cam { transform: scale(1.08); }
 }

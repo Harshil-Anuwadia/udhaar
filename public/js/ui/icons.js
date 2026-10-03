@@ -8,6 +8,8 @@ const F = (d) => `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true
 export const Icon = {
   wallet: S('<path d="M19 8V5H6a3 3 0 0 0 0 6h14v9H6a3 3 0 0 1-3-3V8"/><path d="M20 12h-5a2 2 0 0 0 0 4h5"/><circle cx="15.5" cy="14" r=".7" fill="currentColor" stroke="none"/>'),
   coins: S('<ellipse cx="9" cy="7" rx="6" ry="3"/><path d="M3 7v5c0 4 12 4 12 0V7M3 12v5c0 4 12 4 12 0v-5m3-1c5 0 5 6 0 6m0-11c5 0 5 5 0 5"/>'),
+  money: S('<rect x="3" y="6" width="18" height="12" rx="2.2"/><circle cx="12" cy="12" r="2.4"/><path d="M6.5 9.5h1.2M16.3 14.5h1.2"/>'),
+  sound: S('<path d="M4 10v4m4-7v10m4-13v16m4-13v10m4-7v4"/>'),
   palette: S('<path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-3.7c-1-.6-.6-2.3.7-2.3H18c4 0 4-12-6-12Z"/><circle cx="7" cy="10" r="1" fill="currentColor"/><circle cx="10" cy="6.5" r="1" fill="currentColor"/><circle cx="15" cy="7" r="1" fill="currentColor"/>'),
   device: S('<rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M10 5h4m-3 13.5h2"/>'),
   receipt: S('<path d="M5 3v18l3-2 4 2 4-2 3 2V3l-3 2-4-2-4 2-3-2Z"/><path d="M9 9h6m-6 4h6m-6 4h2"/>'),
