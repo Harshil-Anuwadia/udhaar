@@ -1,0 +1,19 @@
+/* Desktop has an availability notice; the product has one mobile layout. */
+.desktop-gate { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  body { background: #F5F7F2; color: #17241B; }
+  body > :not(.desktop-gate) { display: none !important; }
+  .desktop-gate {
+    display: flex; flex-direction: column;
+    min-height: 100dvh; width: min(100%, 1100px);
+    margin-inline: auto; padding: clamp(28px, 5vw, 64px);
+  }
+  .desktop-gate__brand { display: flex; align-items: center; gap: 12px; font-size: 28px; font-weight: 750; letter-spacing: -.06em; }
+  .desktop-gate__brand img { width: 42px; height: 42px; }
+  .desktop-gate__body { margin-block: auto; padding-block: 64px; max-width: 760px; }
+  .desktop-gate__eyebrow { margin-bottom: 24px; color: #326448; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  .desktop-gate h1 { font-size: clamp(36px, 5.8vw, 72px); font-weight: 600; letter-spacing: -.045em; line-height: 1.08; text-wrap: balance; }
+  .desktop-gate__body > p:last-child { margin-top: 28px; max-width: 39ch; color: #566159; font-size: clamp(16px, 1.6vw, 20px); line-height: 1.6; }
+  .desktop-gate__foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 16px; border-top: 1px solid #CCD6CC; padding-top: 24px; font-size: 13px; color: #566159; }
+  .desktop-gate__address { color: #1C5438; font-weight: 650; user-select: text; overflow-wrap: anywhere; }
+}

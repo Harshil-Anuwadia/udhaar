@@ -85,7 +85,7 @@ async function boot() {
   }
 
   const prefs = loadPrefs();
-  applyTheme(prefs.theme || 'system');
+  applyTheme(prefs.theme || 'light');
 
   buildChrome();
   setRenderHook(syncChrome);
@@ -98,7 +98,7 @@ async function boot() {
   if (cached?.user && hasSession()) {
     setState({ user: cached.user, friends: cached.friends || [], groups: cached.groups || [], stats: cached.stats });
     setCurrency(cached.user.currency || 'INR');
-    applyTheme(cached.user.theme || prefs.theme || 'system');
+    applyTheme(cached.user.theme || prefs.theme || 'light');
   }
 
   if (hasSession()) {
@@ -106,7 +106,7 @@ async function boot() {
       const { user } = await api.me();
       setState({ user });
       setCurrency(user.currency);
-      applyTheme(user.theme || prefs.theme || 'system');
+      applyTheme(user.theme || prefs.theme || 'light');
       saveCache();
       if (pendingCount()) {
         const r = await flushQueue();

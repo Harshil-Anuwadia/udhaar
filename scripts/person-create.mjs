@@ -16,7 +16,7 @@ const base = `http://127.0.0.1:${server.address().port}`;
 let browser;
 try {
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  const context = await browser.newContext({ viewport: { width: 360, height: 640 }, serviceWorkers: 'block' });
+  const context = await browser.newContext({ isMobile: true, hasTouch: true, viewport: { width: 360, height: 640 }, serviceWorkers: 'block' });
   const signup = await context.request.post(`${base}/api/auth/signup`, { data: { name: 'Person Tester', handle: 'persontester', secret: 'testpass123', currency: 'INR' } });
   const { token } = await signup.json();
   await context.request.post(`${base}/api/me/onboarded`, { headers: { Authorization: `Bearer ${token}` }, data: {} });

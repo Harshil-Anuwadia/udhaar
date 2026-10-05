@@ -13,7 +13,7 @@ try {
     await page.locator('svg').screenshot({ path: new URL(`../public/icons/${name}.png`, import.meta.url).pathname, omitBackground: true });
   }
   await page.setViewportSize({ width: 512, height: 512 });
-  await page.setContent(`<style>html,body{margin:0;padding:0;background:#17150F}svg{display:block;width:80vw;height:80vh;margin:10vw}</style>${svg}`);
+  await page.setContent(`<style>html,body{margin:0;padding:0;background:#123D2B}svg{display:block;width:80vw;height:80vh;margin:10vw}</style>${svg}`);
   await page.screenshot({ path: new URL('../public/icons/maskable-512.png', import.meta.url).pathname });
   console.log('Generated favicon, touch, app and maskable icons from icon.svg.');
 } finally { await browser.close(); }

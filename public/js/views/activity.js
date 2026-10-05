@@ -1,8 +1,8 @@
+import { Art } from '../ui/art.js';
 /* Activity: everything that happened while you weren’t looking. */
 
 import { h, esc, buzz, relTime, withSymbol, avatarHTML, money } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
-import { Art } from '../ui/art.js';
 import { api } from '../core/api.js';
 import { state, setState, bus } from '../core/store.js';
 import { mount, setHeader, showFab } from './view.js';
@@ -19,82 +19,65 @@ const TYPE_META = {
 };
 
 export async function viewActivity({ outlet, isCurrent = () => true }) {
-  setHeader({ title: 'Alerts', sub: 'New lines, replies, and updates' });
+  setHeader({ title: 'Alerts', sub: 'What’s new between you and your people' });
   showFab(true);
 
   // Instant paint from cache
-  const cachedEvents = state.events;
-  const hadCache = !!cachedEvents;
+  const cachedEvents = state.events || [];
+  const hadCache = cachedEvents.length > 0;
   if (hadCache) {
-    mount(outlet, 'app', () => activityHTML(cachedEvents, [], cachedEvents.length > 0), (main) => bind(main, cachedEvents, []));
+    mount(outlet, 'app', () => activityHTML(cachedEvents, [], { loading: true }), (main) => bind(main, cachedEvents, []));
   } else {
     mount(outlet, 'app', () => `<div class="card skeleton" style="height:80px"></div><div class="card skeleton" style="height:80px"></div>`);
   }
 
-  let events = [];
-  let incoming = [];
-  let unread = 0;
-  try {
-    const [ev, inc] = await Promise.all([
-      api.events().catch(() => ({ events: [], unread: 0 })),
-      api.incoming().catch(() => ({ entries: [] })),
-    ]);
-    if (!isCurrent()) return;
-    events = ev.events; unread = ev.unread; incoming = inc.entries;
-    setState({ events, unread: 0 });
-    if (unread) api.readEvents().catch(() => {});
-  } catch (e) {
-    if (!isCurrent()) return;
-    toastError(e.message);
+  const [ev, inc] = await Promise.allSettled([api.events(), api.incoming()]);
+  if (!isCurrent()) return;
+  const events = ev.status === 'fulfilled' ? ev.value.events : cachedEvents;
+  // Only unfinished, unconfirmed entries need a review; settled entries aren't tasks.
+  const incoming = inc.status === 'fulfilled' ? inc.value.entries.filter(e => e.status === 'open' && !e.confirmedAt) : [];
+  const failed = ev.status === 'rejected' || inc.status === 'rejected';
+  if (ev.status === 'fulfilled') {
+    setState({ events, unread: ev.value.unread });
+    if (ev.value.unread) api.readEvents().then(() => {
+      if (isCurrent()) setState({ unread: 0 });
+    }).catch(() => {});
   }
-
-  const changed = !hadCache ||
-    JSON.stringify(events) !== JSON.stringify(cachedEvents) ||
-    incoming.length > 0;
-
-  if (changed) {
-    const hasContent = events.length || incoming.length;
-    mount(outlet, 'app', () => activityHTML(events, incoming, hasContent), (main) => bind(main, events, incoming), { animate: !hadCache });
-  }
+  mount(outlet, 'app', () => activityHTML(events, incoming, { failed }), (main) => bind(main, events, incoming), { animate: !hadCache });
 }
 
-function activityHTML(events, incoming, hasContent) {
-  if (!hasContent) {
+function activityHTML(events, incoming, { failed = false, loading = false } = {}) {
+  const notice = failed ? `<div class="activity-notice" role="status"><span>${Icon.wifiOff}</span><div><strong>Couldn’t check all your updates</strong><p>${events.length || incoming.length ? 'These are the updates we have. ' : ''}Try again to see the latest.</p><button class="btn btn--outline btn--sm" data-act="retry">${Icon.refresh} Try again</button></div></div>` : loading ? '<p class="tiny muted" role="status">Checking for updates…</p>' : '';
+  if (!events.length && !incoming.length && !failed && !loading) {
     return `<div class="card"><div class="empty">
-      <div class="empty__art">${Art.plane()}</div>
-      <h3>Nothing new yet</h3>
-      <p>When someone joins or responds to a shared line, you’ll see it here.</p>
-      <button class="btn btn--primary" data-act="invite">Invite a person</button>
+      <div class="empty__art empty__art--alerts">${Art.plane()}</div>
+      <h3>You’re up to date</h3>
+      <p>New entries, replies, and invitations will appear here. Nothing needs your attention right now.</p>
+      <a class="btn btn--outline" href="#/">Back to your people</a>
     </div></div>`;
   }
 
-  const feed = [
-    ...events.map((e) => ({ ts: e.createdAt, kind: 'event', data: e })),
-    ...incoming.map((e) => ({ ts: e.createdAt, kind: 'incoming', data: e })),
-  ].sort((a, b) => b.ts - a.ts);
-
   return `
-  <div class="list">
-    ${feed.map((item) => item.kind === 'event' ? eventRow(item.data) : incomingRow(item.data)).join('')}
-  </div>
-  <p class="tiny dim center">Only in-app updates here. We never message your friends for you.</p>`;
+  ${notice}
+  ${incoming.length ? `<section class="activity-section"><div class="section-head"><h2>Ready to review</h2><span class="activity-count">${incoming.length}</span></div><p class="activity-section__intro">Check the details your people added. Open their ledger to confirm or ask about a line.</p><div class="list">${incoming.map(incomingRow).join('')}</div></section>` : ''}
+  ${events.length ? `<section class="activity-section"><div class="section-head"><h2>Recent updates</h2><span class="tiny dim">Swipe to dismiss</span></div><div class="list">${[...events].sort((a, b) => b.createdAt - a.createdAt).map(eventRow).join('')}</div></section>` : ''}
+  ${events.length ? '<p class="tiny dim center">Recent updates stay here until you dismiss them.</p>' : ''}`;
 }
 
 function eventRow(e) {
   const meta = TYPE_META[e.type] || { icon: 'info', tone: '' };
   const tone = meta.tone === 'warn' ? 'warn' : meta.tone;
-  const bg = tone ? `var(--${tone}-bg)` : 'var(--surface-3)';
   const fg = tone ? `var(--${tone})` : 'var(--ink-2)';
+  const tag = e.friendshipId ? 'button' : 'div';
   return `
-  <div class="alert-row" data-alert="${esc(e.id)}">
-  <button class="setrow alert-row__content" data-ev="${esc(e.friendshipId || '')}" style="align-items:flex-start;${e.read ? '' : 'background:var(--surface-2)'}">
-    <span class="setrow__icon" style="background:${bg};color:${fg}">${Icon[meta.icon]}</span>
-    <span class="grow wrap">
-      <span class="setrow__label" style="font-weight:${e.read ? 500 : 650};font-size:var(--fs-14);line-height:1.35;display:block">${esc(e.body || e.type)}</span>
-      <span class="setrow__hint">${relTime(e.createdAt)}${e.read ? '' : ' · new'}</span>
+  <div class="alert-row ${e.read ? '' : 'is-unread'}" data-alert="${esc(e.id)}">
+  <${tag} class="alert-row__content" ${e.friendshipId ? `type="button" data-ev="${esc(e.friendshipId)}"` : ''}>
+    <span class="alert-row__icon" style="color:${fg}">${Icon[meta.icon]}</span>
+    <span class="alert-row__copy">
+      <span class="alert-row__message">${esc(e.body || e.type)}</span>
+      <span class="alert-row__meta">${relTime(e.createdAt)}${e.read ? '' : ' · New'}${e.friendshipId ? ' · View ledger' : ''}</span>
     </span>
-    ${e.read ? '' : '<span class="dot" style="margin-top:8px"></span>'}
-  </button>
+  </${tag}>
   <button class="alert-row__dismiss" data-dismiss-event="${esc(e.id)}" type="button" aria-label="Dismiss notification">${Icon.close}</button>
   </div>`;
 }
@@ -102,13 +85,14 @@ function eventRow(e) {
 function incomingRow(e) {
   const isDue = e.direction === 'owed_by_me';
   return `
-  <button class="setrow" data-incoming="${esc(e.id)}" style="align-items:flex-start">
-    <span class="setrow__icon" style="background:var(--${isDue ? 'due' : 'credit'}-bg);color:var(--${isDue ? 'due' : 'credit'})">${Icon[isDue ? 'arrowUp' : 'arrowDown']}</span>
-    <span class="grow wrap">
-      <span class="setrow__label" style="font-size:var(--fs-14);display:block">
+  <button class="alert-row__content alert-review" type="button" data-incoming="${esc(e.id)}">
+    <span class="alert-row__avatar">${avatarHTML({ name:e.friend.name, seed:e.friend.avatarSeed, size:36 })}</span>
+    <span class="alert-row__copy">
+      <span class="alert-row__message">
         <b>${esc(e.friend.name)}</b> logged ${isDue ? `that you owe them ${e.kind === 'money' ? withSymbol(e.amount) : 'something'}` : `that they owe you ${e.kind === 'money' ? withSymbol(e.amount) : 'something'}`}
       </span>
-      <span class="setrow__hint">${esc(e.note || '')} ${e.note ? '· ' : ''}${relTime(e.createdAt)}</span>
+      <span class="alert-row__meta">${esc(e.note || '')} ${e.note ? '· ' : ''}${relTime(e.createdAt)}</span>
+      <span class="alert-row__next">Review together ${Icon.chevR}</span>
     </span>
   </button>`;
 }
@@ -140,6 +124,7 @@ function bind(main, events, incoming) {
     const dismiss = e.target.closest('[data-dismiss-event]');
     if (dismiss) { e.stopPropagation(); return dismissEvent(dismiss.dataset.dismissEvent, dismiss.closest('[data-alert]'), events); }
     const act = e.target.closest('[data-act]');
+    if (act?.dataset.act === 'retry') return navigate('/activity');
     if (act?.dataset.act === 'invite') {
       buzz(8);
       const { friends } = await api.friends();

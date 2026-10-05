@@ -1,7 +1,6 @@
-/* The Udhaar mark: an open U, two sides of the same ledger. */
-export const BrandMark = () => `<svg class="brand-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
-  <rect x="2" y="2" width="44" height="44" rx="14" fill="var(--ink)"/>
-  <path class="brand-mark__stroke" pathLength="1" d="M14 14v12c0 12 20 12 20 0V14" stroke="var(--paper)" stroke-width="3.5" stroke-linecap="round"/>
-  <path class="brand-mark__page" d="M20 14v11c0 3 2 5 4 5" stroke="var(--paper)" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"/>
-  <circle class="brand-mark__dot" cx="34" cy="13" r="4" fill="var(--due)" stroke="var(--ink)" stroke-width="2"/>
+/* A joined, angular U: two sides, one shared record. Same geometry as icon.svg. */
+export const BrandMark = () => `<svg class="brand-mark" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false">
+  <rect width="64" height="64" fill="#123D2B"/>
+  <path class="brand-mark__body" d="M16 15H25V38L30 43H34L39 38V28H48V42L38 52H26L16 42V15Z" fill="#F4F7ED"/>
+  <path class="brand-mark__dot" d="M39 12H48V21H39V12Z" fill="#87DFAD"/>
 </svg>`;

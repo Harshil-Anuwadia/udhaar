@@ -10,8 +10,8 @@
     "standalone",
     "minimal-ui"
   ],
-  "background_color": "#F6F3EC",
-  "theme_color": "#F6F3EC",
+  "background_color": "#123D2B",
+  "theme_color": "#F7F8F5",
   "categories": [
     "finance",
     "social",
@@ -21,8 +21,8 @@
   "dir": "ltr",
   "shortcuts": [
     {
-      "name": "Log something",
-      "short_name": "Log",
+      "name": "Add entry",
+      "short_name": "Add entry",
       "description": "Write a new line in the ledger",
       "url": "/#/add",
       "icons": [
@@ -94,13 +94,6 @@
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Your ledger, one screen"
-    },
-    {
-      "src": "/og.png",
-      "sizes": "1200x630",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Shared tabs, without the chat scroll"
     }
   ]
 }

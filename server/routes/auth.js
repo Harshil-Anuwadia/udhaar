@@ -15,7 +15,7 @@ const publicUser = async (u) => ({
   name: u.name,
   avatarSeed: u.avatar_seed,
   currency: u.currency,
-  theme: u.theme,
+  theme: u.theme === 'system' ? 'light' : u.theme,
   voiceMode: u.voice_mode || 'neutral',
   plan: u.plan,
   honorScore: Math.round(u.honor_score),
@@ -74,8 +74,8 @@ r.post('/signup', authBurst, validate(SignupSchema), async (req, res) => {
 
   const id = newId('u');
   await db.prepare(
-    `INSERT INTO users (id, handle, name, phone, email, password_hash, avatar_seed, currency, created_at, last_seen_at, is_demo)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO users (id, handle, name, phone, email, password_hash, avatar_seed, currency, theme, created_at, last_seen_at, is_demo)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     id,
     handle,
@@ -85,6 +85,7 @@ r.post('/signup', authBurst, validate(SignupSchema), async (req, res) => {
     hashSecret(secret),
     Math.floor(Math.random() * 1e6),
     currency,
+    'light',
     now(),
     now(),
     demo ? 1 : 0,

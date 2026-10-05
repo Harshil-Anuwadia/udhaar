@@ -4,8 +4,7 @@
 .brand-lockup .brand-mark { width: 48px; height: 48px; }
 .brand-lockup--sm .wordmark { font-size: 28px; }
 .brand-lockup--sm .brand-mark { width: 32px; height: 32px; }
-.brand-mark__stroke { stroke-dasharray: 1; animation: brand-write 800ms var(--ease-out) both; }
-.brand-mark__page { animation: brand-page 650ms var(--ease-out) 100ms both; }
+.brand-mark__body { animation: brand-page 450ms var(--ease-out) both; }
 .brand-mark__dot { transform-box: fill-box; transform-origin: center; animation: brand-dot 500ms var(--ease-spring) 300ms both; }
 .authstep__head .brand-mark { width: 36px; height: 36px; }
 .setup-progress { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -29,8 +28,9 @@
 @media (max-height: 650px) {
   .onboard { gap: 10px; }
   .onboard__art .art { width: 96px; }
+  .onboard--currency .onboard__art .art { max-height: 70px; }
   .onboard--person .onboard__art, .onboard--first .onboard__art { display: none; }
-  .onboard__actions { gap: 4px; padding-top: 8px; padding-bottom: calc(8px + var(--safe-b)); }
+  .onboard__actions { gap: 4px; padding-top: 6px; padding-bottom: calc(6px + var(--safe-b)); }
   .onboard--first .onboard__person-card { padding-block: 10px; }
   .onboard--first .onboard__first-line { padding-top: 12px; padding-bottom: 12px; margin-top: 0; }
 }
@@ -41,12 +41,14 @@
 .empty__art.empty__art--icon { width: 56px; height: 56px; }
 .empty__art.empty__art--icon svg { width: 36px; height: 36px; }
 .empty__art .art { width: 100%; }
+.empty__art--alerts { width: 170px; height: 140px; }
+.empty__art--alerts .art { display: block; width: 100%; height: 100%; object-fit: contain; }
 :root[data-effective="dark"] .empty__art { opacity: 1; }
 .invite__art .art, .twoside__art .art { width: 100%; }
 .demo-indicator { align-self: flex-start; font-size: var(--fs-12); text-transform: none; letter-spacing: 0; }
 
 @keyframes brand-write { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-@keyframes brand-page { from { opacity: 0; } to { opacity: .8; } }
+@keyframes brand-page { from { opacity: 0; } to { opacity: 1; } }
 @keyframes brand-dot { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes art-arrive { from { translate: 0 8px; opacity: 0; } to { translate: 0 0; opacity: 1; } }
 @keyframes art-glint { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: .65; } }

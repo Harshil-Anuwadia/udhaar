@@ -1,15 +1,23 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="system">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5">
   <title>udhaar — the little things between us</title>
 
   <meta name="description" content="The cab, the split, the 'I'll send it later.' Keep shared money, favours and promises in one place, without searching the group chat.">
-  <meta name="theme-color" content="#F6F3EC" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#15130F" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#F6F3EC">
+  <meta name="theme-color" content="#F7F8F5">
   <meta name="color-scheme" content="light dark">
+  <script>
+    try {
+      const saved = JSON.parse(localStorage.getItem('udhaar.prefs.v1') || '{}').theme;
+      if (saved === 'dark' || saved === 'sage') {
+        document.documentElement.dataset.theme = saved;
+        document.documentElement.dataset.effective = saved === 'dark' ? 'dark' : 'light';
+        document.querySelector('meta[name="theme-color"]').content = saved === 'dark' ? '#111713' : '#EFF4EF';
+      }
+    } catch {}
+  </script>
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -35,8 +43,9 @@
 
   <link rel="stylesheet" href="/styles/tokens.css">
   <link rel="stylesheet" href="/styles/app.css">
-  <link rel="stylesheet" href="/styles/landing.css">
+  <link rel="stylesheet" href="/styles/auth-entry.css">
   <link rel="stylesheet" href="/styles/motion.css">
+  <link rel="stylesheet" href="/styles/mobile-entry.css">
 
   <script type="application/ld+json">
   {
@@ -46,46 +55,48 @@
     "alternateName": "Udhaar — the little things between us",
     "url": "/",
     "applicationCategory": "FinanceApplication",
-    "operatingSystem": "Any",
+    "operatingSystem": "Android, iOS",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
     "description": "The cab, the split, the I'll send it later. Keep shared money, favours and promises together."
   }
   </script>
 
   <style>
-    /* First-paint shell so the app never flashes white on a mid-range Android. */
-    html { background: #F6F3EC; }
-    @media (prefers-color-scheme: dark) { html { background: #15130F; } }
+    /* A short graphite-and-sage splash before the chosen canvas appears. */
+    html { background: #F7F8F5; }
+    html[data-theme="dark"] { background: #111713; }
+    html[data-theme="sage"] { background: #EFF4EF; }
     #boot {
       position: fixed; inset: 0; display: grid; place-items: center; z-index: 100;
-      background: #F6F3EC;
-      font-family: "Instrument Serif", Georgia, serif;
+      background: #0C0D0C; color: #70AD89;
+      font-family: "DM Sans", system-ui, sans-serif;
     }
-    @media (prefers-color-scheme: dark) { #boot { background: #15130F; color: #F6F1E8; } }
-    #boot .w { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: clamp(2.4rem, 12vw, 3.2rem); letter-spacing: -0.045em; line-height: 1; animation: bootIn 620ms cubic-bezier(.16,1,.3,1) both; }
-    #boot .w svg { width: 48px; height: 48px; flex: 0 0 auto; }
-    #boot .w i { font-style: normal; color: #C4372A; }
-    #boot p { margin-top: 14px; font-family: system-ui, sans-serif; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; opacity: .45; }
+    #boot .w { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; font-size: clamp(2rem, 10vw, 2.75rem); font-weight: 750; letter-spacing: -0.07em; line-height: 1; animation: bootIn 620ms cubic-bezier(.16,1,.3,1) both; }
+    #boot .w img { width: 80px; height: 80px; flex: 0 0 auto; }
+    #boot .w i { font-style: normal; color: #FFFFFF; }
+    #boot p { margin-top: 14px; font-size: 11px; font-weight: 650; letter-spacing: .18em; text-transform: uppercase; color: #FFFFFF; opacity: .58; }
     @keyframes bootIn { from { opacity: 0; transform: translateY(10px) scale(.97); } }
     @media (prefers-reduced-motion: reduce) { #boot .w { animation: none; } }
     .bare-outlet { padding: 0 !important; }
   </style>
-  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to your ledger</a>
 
-  <div id="boot"><div style="text-align:center"><div class="w"><svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect x="2" y="2" width="44" height="44" rx="14" fill="#17150F"/><path d="M14 14v12c0 12 20 12 20 0V14" stroke="#F5F2E9" stroke-width="3.5" stroke-linecap="round"/><path d="M20 14v11c0 3 2 5 4 5" stroke="#F5F2E9" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"/><circle cx="34" cy="13" r="4" fill="#C4372A" stroke="#17150F" stroke-width="2"/></svg><span>udhaar<i>.</i></span></div><p>getting your tabs</p></div></div>
+  <div id="boot"><div style="text-align:center"><div class="w"><img src="/icons/icon.svg" alt="" width="80" height="80"><span>udhaar<i>.</i></span></div><p>the little things between us</p></div></div>
 
   <div id="app" aria-label="Udhaar"></div>
 
-  <div class="desk-note">
-    <div>
-      <h4>Built for the thumb.</h4>
-      <p>You’re seeing the phone canvas. Resize the window, or open this on a device — the whole product is designed around one-handed use, bottom sheets and four-second logging.</p>
+  <main class="desktop-gate" aria-labelledby="desktop-title">
+    <div class="desktop-gate__brand"><img src="/icons/icon.svg" alt="" width="42" height="42"><span>udhaar.</span></div>
+    <div class="desktop-gate__body">
+      <p class="desktop-gate__eyebrow">Made for your phone</p>
+      <h1 id="desktop-title">Sorry, udhaar isn’t available on desktop right now.</h1>
+      <p>Open this page on your phone to continue. Your people and your shared stories will be right there.</p>
     </div>
-  </div>
+    <div class="desktop-gate__foot"><span>The little things between us.</span><span class="desktop-gate__address"></span></div>
+  </main>
 
-  <script type="module" src="/js/main.js"></script>
+  <script type="module" src="/js/entry.js"></script>
 </body>
 </html>

@@ -12,10 +12,10 @@ import { Sheet, confirmSheet } from '../ui/sheet.js';
 import { confetti } from '../ui/confetti.js';
 import { groupPosition } from '../core/group-position.js';
 
-const PALETTE = ['#80614A', '#536482', '#63724E', '#806A47', '#795F79', '#4F7372', '#916157', '#626E53'];
+const PALETTE = ['#315C45', '#53655C', '#47674F', '#626C58', '#405D59', '#435648', '#586D5C', '#4A6151'];
 
 export async function viewGroups({ outlet, isCurrent = () => true }) {
-  setHeader({ title: 'Groups', sub: 'The split, minus the chat maths' });
+  setHeader({ title: 'Groups', sub: 'For the things you do together' });
   showFab(false);
 
   // Instant paint from cache
@@ -57,13 +57,13 @@ function groupsHTML(groups, friends) {
     <div class="card anim-rise"><div class="empty">
       <div class="empty__art">${Art.split()}</div>
       <h3>First group starts here</h3>
-      <p>That trip plan, flat bill, or post-match food run? Give it a group so the maths has a home.</p>
+      <p>A weekend away, a shared home, a dinner together. Keep the details with the people who were there.</p>
       <button class="btn btn--primary" data-act="newgroup">${Icon.plus} New group</button>
     </div></div>` : `
+    <div class="section-head collection-head"><h2>Your groups <span class="people-count">${groups.length}</span></h2><button class="btn btn--outline btn--sm" data-act="newgroup">${Icon.plus} New group</button></div>
     <div class="col" style="gap:var(--s3)">
       ${groups.map((g, i) => groupCard(g, i)).join('')}
     </div>
-    <button class="btn btn--outline btn--block" data-act="newgroup">${Icon.plus} New group</button>
   `}`;
 }
 
@@ -79,12 +79,12 @@ function groupCard(g, i) {
       <span class="avatar avatar--48" style="background:${color};border-radius:var(--r-md)"><span>${esc(g.name.slice(0, 2).toUpperCase())}</span></span>
       <span class="grow wrap">
         <span class="groupcard__name">${esc(g.name)}</span>
-        <span class="groupcard__meta">${plural(g.members.length, 'person', 'people')} · ${plural(g.splits, 'split')}</span>
+        <span class="groupcard__meta">${plural(g.members.length, 'person', 'people')} · ${g.splits ? plural(g.splits, 'bill') : 'No bills yet'}</span>
       </span>
-      <span class="groupcard__position">
+      ${g.splits ? `<span class="groupcard__position">
         <b class="${g.splits && position.state !== 'settled' ? 'num' : ''} ${position.state === 'outgoing' ? 'due-text' : position.state === 'settled' || !g.splits ? '' : 'credit-text'}">${!g.splits ? 'Ready' : position.state === 'settled' ? 'Square' : withSymbol(position.incoming || position.outgoing, cur)}</b>
         <span class="tiny dim">${!g.splits ? 'No splits yet' : position.state === 'both' ? `also owe ${withSymbol(position.outgoing, cur)}` : position.state === 'incoming' ? 'coming to you' : position.state === 'outgoing' ? 'you owe' : 'all settled'}</span>
-      </span>
+      </span>` : ''}
     </div>
 
     <div class="stack">
@@ -202,7 +202,7 @@ export async function viewGroup({ outlet, params, isCurrent = () => true }) {
   if (!isCurrent()) return;
 
   const { group, splits, entries } = data;
-  setHeader({ title: esc(group.name), back: true });
+  setHeader({ title: esc(group.name), sub: plural(group.members.length, 'person', 'people'), back: true, actions: [{ label:'Manage group members', icon:Icon.people, onClick:() => openMembers(group) }] });
 
   mount(outlet, 'app', () => groupDetailHTML(group, splits, entries), (main) => bindGroupDetail(main, group, splits, entries));
 }
@@ -217,23 +217,20 @@ function groupDetailHTML(g, splits, entries) {
   <section class="ledger-page anim-rise" style="padding:var(--s5) var(--s5) var(--s4)">
     <div class="netcard__label">Still to collect</div>
     <div class="netcard__amount" style="color:var(--credit)"><span class="cur">${symbol(cur)}</span>${money(owedToMe, cur)}</div>
-    <p class="netcard__verdict">${iOwe ? `You also owe ${withSymbol(iOwe, cur)} in here.` : `Across ${plural(g.members.length, 'person')} and ${plural(splits.length, 'split')}.`}</p>
-    <div class="row" style="gap:var(--s2);margin-top:var(--s4)">
-      <button class="btn btn--primary grow" data-act="split">${Icon.plus} Add a bill</button>
-      <button class="btn btn--outline" data-act="members" aria-label="Manage people">${Icon.people}</button>
-    </div>
+    <p class="netcard__verdict">${iOwe ? `You also owe ${withSymbol(iOwe, cur)} in here.` : owedToMe ? `From ${plural(splits.length, 'shared bill')}.` : 'Everyone is settled.'}</p>
+    <button class="btn btn--primary btn--block group-add-bill" data-act="split">${Icon.receipt} Add a bill</button>
   </section>
 
   <section class="anim-rise" style="animation-delay:50ms">
     <div class="section-head"><h2>Who owes what</h2></div>
-    <div class="list" style="padding:var(--s3) var(--s4)">
+    <div class="list group-members-summary">
       ${g.members.map((m) => `
-        <div class="row" style="gap:10px;padding:7px 0">
+        <div class="group-member-summary">
           ${avatarHTML({ name: m.name, seed: m.seed ?? m.avatarSeed ?? m.avatar_seed, size: 32 })}
-          <span class="small truncate" style="width:78px">${esc(m.name)}</span>
-          <span class="splitbar grow"><i style="width:${Math.round(((m.owes || m.isOwed) / max) * 100)}%;background:${m.owes ? 'var(--due)' : 'var(--credit)'}"></i></span>
-          <span class="tiny num" style="width:70px;text-align:right;color:${m.owes ? 'var(--due)' : m.isOwed ? 'var(--credit)' : 'var(--ink-4)'}">
-            ${m.owes ? `−${shortMoney(m.owes, cur)}` : m.isOwed ? `+${shortMoney(m.isOwed, cur)}` : 'square'}
+          <span class="group-member-summary__name">${esc(m.name)}</span>
+          <span class="group-member-summary__amount ${m.owes ? 'credit-text' : m.isOwed ? 'due-text' : 'muted'}">
+            <b class="num">${m.owes ? withSymbol(m.owes, cur) : m.isOwed ? withSymbol(m.isOwed, cur) : 'Settled'}</b>
+            ${m.owes || m.isOwed ? `<small>${m.owes ? 'owes you' : 'you owe'}</small>` : ''}
           </span>
         </div>`).join('')}
     </div>
@@ -255,10 +252,7 @@ function groupDetailHTML(g, splits, entries) {
           </span>
           <span class="entry__amt"><b class="num">${withSymbol(s.amount, cur)}</b></span>
         </button>`).join('')}
-    </div>` : `<div class="card"><div class="empty" style="padding:var(--s8) var(--s5)">
-      <h3>No bills in this group</h3><p>Add the dinner, fuel, or stay deposit. We’ll split it and write everyone’s share down.</p>
-      <button class="btn btn--primary" data-act="split">${Icon.plus} Add a bill</button>
-    </div></div>`}
+    </div>` : `<p class="section-empty">Your first dinner, trip, or shared bill will appear here. Use Add a bill above to split it.</p>`}
   </section>
 
   ${entries.filter((e) => e.status === 'settled').length ? `
@@ -275,9 +269,9 @@ function groupDetailHTML(g, splits, entries) {
     </div>
   </section>` : ''}
 
-  <section class="anim-rise">
-    <button class="btn btn--quiet btn--block small" data-act="archive" style="color:var(--ink-3)">Archive this group</button>
-    <button class="btn btn--quiet btn--block small" data-act="delete" style="color:var(--due)">Delete group</button>
+  <section class="group-management anim-rise" aria-label="Group options">
+    <button class="btn btn--quiet" data-act="archive">Archive group</button>
+    <button class="btn btn--quiet due-text" data-act="delete">Delete group</button>
   </section>`;
 }
 

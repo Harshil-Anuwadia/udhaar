@@ -37,6 +37,10 @@ test('signup, login, friend ledger, receipt, avatar, group, and settings work on
     });
     assert.equal(signup.response.status, 201, JSON.stringify(signup.data));
     const token = signup.data.token;
+    assert.equal(signup.data.user.theme, 'light', 'new ledgers begin with a deliberate paper palette');
+    const sagePalette = await request('PATCH', '/api/me/profile', { theme: 'sage' }, token);
+    assert.equal(sagePalette.response.status, 200, 'the selected palette can be saved');
+    assert.equal(sagePalette.data.user.theme, 'sage');
     const setupCurrency = await request('PATCH', '/api/me/profile', { currency: 'USD' }, token);
     assert.equal(setupCurrency.response.status, 200, 'an empty setup ledger can choose its initial currency');
     assert.equal(setupCurrency.data.user.currency, 'USD');

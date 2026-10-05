@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL, avatar_seed INTEGER NOT NULL DEFAULT 0, avatar_path TEXT,
   currency TEXT NOT NULL DEFAULT 'INR', honor_score REAL NOT NULL DEFAULT 50,
   honor_n INTEGER NOT NULL DEFAULT 0, onboarded INTEGER NOT NULL DEFAULT 0,
-  plan TEXT NOT NULL DEFAULT 'free', theme TEXT NOT NULL DEFAULT 'system',
+  plan TEXT NOT NULL DEFAULT 'free', theme TEXT NOT NULL DEFAULT 'light',
   voice_mode TEXT NOT NULL DEFAULT 'neutral' CHECK (voice_mode IN ('neutral','male','female')),
   is_demo INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL
 );

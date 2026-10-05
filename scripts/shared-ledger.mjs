@@ -3,7 +3,7 @@ import { chromium } from 'playwright-core';
 
 const base = process.env.BASE_URL || 'http://127.0.0.1:4173';
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-const setup = await browser.newContext({ serviceWorkers: 'block' });
+const setup = await browser.newContext({ isMobile: true, hasTouch: true, serviceWorkers: 'block' });
 const errors = [];
 
 async function post(path, body, token) {
@@ -24,7 +24,7 @@ async function get(path, token) {
 }
 
 async function newPage() {
-  const context = await browser.newContext({ serviceWorkers: 'block' });
+  const context = await browser.newContext({ isMobile: true, hasTouch: true, serviceWorkers: 'block' });
   const page = await context.newPage();
   page.on('pageerror', (error) => errors.push(error.message));
   return page;
@@ -70,11 +70,9 @@ try {
   const signedOut = await newPage();
   await signedOut.goto(`${base}/#/join?token=${miraFriend.inviteToken}`);
   await signedOut.getByRole('button', { name: 'Already have an account? Log in' }).click();
-  await signedOut.getByRole('button', { name: 'Log in', exact: true }).click();
   await signedOut.locator('#li-id').fill(existing.user.handle);
-  await signedOut.getByRole('button', { name: 'Continue' }).click();
   await signedOut.locator('#li-pass').fill('testpass123');
-  await signedOut.getByRole('button', { name: 'Sign in' }).click();
+  await signedOut.getByRole('button', { name: 'Log in', exact: true }).click();
   await signedOut.waitForURL(/#\/join\?token=/, { timeout: 20_000 });
   await signedOut.locator('#existingFriend').selectOption(olderAlice.friend.id);
   await signedOut.getByRole('button', { name: 'Link my ledger' }).click();
@@ -87,11 +85,9 @@ try {
   await post('/api/me/events/read', {}, alice.token);
   const alicePage = await newPage();
   await alicePage.goto(base);
-  await alicePage.getByRole('button', { name: 'Log in', exact: true }).click();
   await alicePage.locator('#li-id').fill(alice.user.handle);
-  await alicePage.getByRole('button', { name: 'Continue' }).click();
   await alicePage.locator('#li-pass').fill('testpass123');
-  await alicePage.getByRole('button', { name: 'Sign in' }).click();
+  await alicePage.getByRole('button', { name: 'Log in', exact: true }).click();
   await alicePage.locator('.netcard').waitFor();
   await alicePage.goto(`${base}/#/friend/${miraFriend.friend.id}`);
   await alicePage.getByText('Shared coffee before login').first().waitFor();
@@ -108,8 +104,9 @@ try {
 
   await newUser.locator('[data-tab="you"]').click();
   await newUser.getByRole('button', { name: /Udhaar Plus/i }).click();
-  await newUser.locator('.plan__price').first().getByText(/199/).waitFor();
-  assert.ok((await newUser.locator('.plan__price').allInnerTexts()).some((price) => price.includes('29')));
+  await newUser.locator('.plan__price').first().waitFor();
+  assert.equal(await newUser.locator('[data-plan="lifetime"]').count(), 1);
+  assert.ok((await newUser.locator('.plan__price').innerText()).includes('49'), 'INR lifetime pricing is shown');
   assert.deepEqual(errors, [], 'shared-ledger journeys have no browser errors');
   console.log('New-user and existing-account invites share one live ledger; low Plus prices render.');
 } finally {

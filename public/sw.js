@@ -5,7 +5,7 @@
    - API writes: never intercepted; the app layer queues them instead.
 */
 
-const VERSION = 'v1.19.1';
+const VERSION = 'v1.24.1';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -19,8 +19,10 @@ const SHELL_ASSETS = [
   '/fonts/jetbrains-mono-latin.woff2',
   '/styles/tokens.css',
   '/styles/app.css',
-  '/styles/landing.css',
+  '/styles/auth-entry.css',
   '/styles/motion.css',
+  '/styles/mobile-entry.css',
+  '/js/entry.js',
   '/js/main.js',
   '/js/core/api.js',
   '/js/core/router.js',
@@ -33,6 +35,7 @@ const SHELL_ASSETS = [
   '/js/ui/toast.js',
   '/js/ui/confetti.js',
   '/js/ui/art.js',
+  '/js/ui/editorial-art.js',
   '/js/ui/brand.js',
   '/js/ui/lightbox.js',
   '/js/ui/photo-picker.js',

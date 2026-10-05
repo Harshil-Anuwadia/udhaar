@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test --test-concurrency=1 server/*.test.js",
+    "icons:build": "node scripts/build-icons.mjs",
     "test:layout": "node scripts/layout-regression.mjs",
     "test:photos": "node scripts/photo-storage.mjs",
     "test:moments": "node scripts/moment-flow.mjs",
@@ -11,6 +12,7 @@
     "test:person-create": "node scripts/person-create.mjs",
     "test:resilience": "node scripts/ui-resilience.mjs",
     "test:visual": "node scripts/visual-audit.mjs",
+    "test:mobile": "node scripts/mobile-polish.mjs",
     "test:motion": "node scripts/motion-audit.mjs",
     "test:actions": "node scripts/action-visibility.mjs",
     "test:navigation": "node scripts/navigation-race.mjs",
@@ -41,6 +43,9 @@
   },
   "devDependencies": {
     "@playwright/browser-chromium": "^1.63.0",
-    "playwright-core": "^1.63.0"
+    "nucleo-sharp-essential": "^1.0.1",
+    "playwright-core": "^1.63.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   }
 }

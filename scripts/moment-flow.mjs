@@ -18,7 +18,7 @@ let browser;
 
 try {
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  const context = await browser.newContext({ viewport: { width: Number(process.env.TEST_WIDTH) || 360, height: 640 }, serviceWorkers: 'block' });
+  const context = await browser.newContext({ isMobile: true, hasTouch: true, viewport: { width: Number(process.env.TEST_WIDTH) || 360, height: 640 }, serviceWorkers: 'block' });
   const errors = [];
   const page = await context.newPage();
   page.on('pageerror', (error) => errors.push(error.message));

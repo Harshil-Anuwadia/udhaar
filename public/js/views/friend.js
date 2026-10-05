@@ -1,6 +1,6 @@
 /* One friendship, end to end: balance, ledger, settle, nudge, invite. */
 
-import { h, esc, buzz, money, symbol, withSymbol, relTime, dueLabel, avatarHTML, plural, daysBetween, formatDate, copyText, shortMoney, currencyCode } from '../core/utils.js';
+import { h, esc, buzz, money, symbol, withSymbol, relTime, dueLabel, avatarHTML, plural, daysBetween, formatDate, copyText, share, shortMoney, currencyCode } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
 import { api } from '../core/api.js';
 import { state, bus } from '../core/store.js';
@@ -82,14 +82,10 @@ function friendHTML(f, entries, moments, history, inviteToken) {
       </div>` : ''}
 
     <div class="hero-actions">
-      ${positive ? `<button class="btn btn--primary" data-act="settle-all">${Icon.check} Settle up</button>
-                    <button class="btn btn--outline" data-act="nudge">${Icon.nudge} Nudge</button>` : ''}
-      ${f.net < 0 ? `<button class="btn btn--due" data-act="pay">${Icon.check} I paid them</button>
-                    <button class="btn btn--outline" data-act="log">${Icon.plus} Log</button>` : ''}
-      ${f.net === 0 ? `<button class="btn btn--primary" data-act="log">${Icon.plus} Add a line</button>
-                       <button class="btn btn--outline" data-act="moment">${Icon.heart} A moment</button>` : ''}
+      <button class="btn btn--primary" data-act="log">${Icon.edit} Add entry</button>
+      ${positive || (f.net === 0 && open.length) ? `<button class="btn btn--outline" data-act="settle-all">${Icon.check} Settle up</button>` : ''}
+      ${f.net < 0 ? `<button class="btn btn--outline" data-act="pay">${Icon.check} I paid them</button>` : ''}
     </div>
-    ${f.net !== 0 ? `<button class="btn btn--quiet btn--block" data-act="log">${Icon.plus} Log a line</button>` : ''}
   </section>
 
 
@@ -102,7 +98,7 @@ function friendHTML(f, entries, moments, history, inviteToken) {
   <section class="anim-rise" style="animation-delay:100ms">
     <div class="section-head">
       <h2>Open lines · ${open.length}</h2>
-      ${open.length ? `<button class="btn btn--quiet btn--sm" data-act="settle-all">${Icon.check} Settle all</button>` : ''}
+      ${open.some(e => e.direction === 'owed_to_me') ? `<button class="btn btn--quiet btn--sm" data-act="nudge">${Icon.nudge} Remind</button>` : ''}
     </div>
     ${open.length
       ? `<div class="list" id="openList">${open.map((e) => swipeRow(e, cur, f)).join('')}</div>
@@ -124,23 +120,22 @@ function friendHTML(f, entries, moments, history, inviteToken) {
   <section class="anim-rise moment-section" aria-label="Moments with ${esc(f.name)}">
     <div class="section-head">
       <h2>Little moments</h2>
-      <button type="button" data-act="moment">${Icon.plus} Add a moment</button>
+      <button type="button" data-act="moment">${Icon.moment} Add a moment</button>
     </div>
     ${moments.length ? `<div class="moment-list">${moments.map(momentRow).join('')}</div>`
-      : `<p class="moment-empty">A place for the details worth keeping. Only you can see them for now.</p>`}
+      : `<p class="moment-empty">A photo, a thank-you, or something you want to remember. Moments are private to you.</p>`}
   </section>
 
-  <section class="card anim-rise" style="padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3)">
-    <div class="row-between">
-      <span class="twoside__art">${Art.clink()}</span>
-      <div><b class="small">Share this ledger</b><p class="tiny muted">Send a link so you both see the same balance.</p></div>
-      <span style="color:${f.linked ? 'var(--settled)' : 'var(--ink-4)'}">${f.linked ? Icon.checkCircle : Icon.lock}</span>
+  <section class="ledger-invite anim-rise">
+    <div class="ledger-invite__heading">
+      <span class="ledger-invite__icon">${f.linked ? Icon.link : Icon.send}</span>
+      <div><h2>${f.linked ? 'One ledger. Both sides.' : 'Better with both of you.'}</h2><p>${f.linked ? 'You’re connected. New entries and changes appear for you both.' : `Invite ${esc(f.name)} to see their side of the story.`}</p></div>
     </div>
-    <div class="row" style="gap:var(--s2)">
-      <button class="btn btn--sm btn--outline grow" data-act="copylink">${Icon.copy} Copy link</button>
-      <button class="btn btn--sm btn--primary grow" data-act="sendlink">${Icon.send} Send</button>
+    <div class="ledger-invite__actions">
+      <button class="btn btn--primary" data-act="sendlink">${Icon.send} ${f.linked ? 'Share link' : 'Share invite'}</button>
+      <button class="btn btn--outline" data-act="copylink">${Icon.copy} Copy link</button>
     </div>
-    ${f.linked ? `<p class="tiny settled-text">Connected. New lines and changes show up in both ledgers.</p>` : '<p class="tiny dim">They will see this ledger after accepting the personal link.</p>'}
+    <p class="ledger-invite__privacy">${Icon.lock}<span>${f.linked ? 'Personal notes and moments stay private.' : 'Only send this link to them. Accepting it connects your ledgers.'}</span></p>
   </section>
   `;
 }
@@ -233,7 +228,7 @@ function bindFriend(main, f, entries, moments, history, inviteToken) {
         if (act === 'remind') return nudge(e, f, shareUrl);
         if (act === 'delete') return confirmSheet({
           title: 'Delete this line?',
-          body: `“${esc(e.note || KIND_WORD[e.kind])}” disappears from the book. There’s no undo, and no receipts.`,
+          body: `“${esc(e.note || KIND_WORD[e.kind])}” disappears from the book. This cannot be undone.`,
           confirmLabel: 'Tear it out',
           danger: true,
           onConfirm: async () => {
@@ -272,8 +267,15 @@ function bindFriend(main, f, entries, moments, history, inviteToken) {
       toast(ok ? 'Link copied.' : 'Could not copy.', { kind: ok ? 'ok' : 'error' });
     }
     if (act === 'sendlink') {
-      const msg = `I'm keeping our udhaar on this — no more "kitna diya tha". Join and you'll see your side too: ${shareUrl}`;
-      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+      const label = actEl.innerHTML;
+      actEl.disabled = true;
+      actEl.innerHTML = '<span class="btn__spinner"></span> Opening…';
+      try {
+        const result = await share({ title:'Our udhaar', text: f.linked ? 'Our little ledger, all in one place.' : `Hey ${f.name}, here’s our shared ledger on udhaar. Join me so we can both keep track.`, url:shareUrl });
+        if (result === 'copied') toastOk('Invite copied. Paste it into your conversation.');
+        if (result === 'failed') toastError('Couldn’t share. Try copying the link.');
+      } catch { toastError('Couldn’t open sharing. You can still copy the link.'); }
+      finally { actEl.disabled = false; actEl.innerHTML = label; }
     }
   });
 }
@@ -369,7 +371,7 @@ async function settleEntry(e, f, main) {
   body.innerHTML = `
     ${photoGallery(photos, `Receipt for ${e.note || 'this line'}`)}
     <p class="small muted">Full amount is <b class="num" style="color:var(--ink)">${withSymbol(e.amount, cur)}</b>. Settled a different number? Change it.</p>
-    <input class="input num" id="settleAmt" type="text" inputmode="decimal" value="${e.amount}" style="font-size:var(--fs-24);text-align:center;font-family:var(--font-mono)">
+    <input class="input num" id="settleAmt" type="text" inputmode="decimal" value="${e.amount}" style="font-size:var(--fs-24);text-align:center;font-family:var(--font-numbers)">
     <div class="quickrow" style="justify-content:center">
       <button class="quick" data-q="full" type="button">Full</button>
       <button class="quick" data-q="half" type="button">Half</button>

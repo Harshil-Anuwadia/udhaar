@@ -11,7 +11,7 @@ const FLAVOUR = {
     money: ['The detail has a place outside the group chat.', 'That number has a line now.', 'Someone paid. The book remembers who.'],
     favor: ['No price tag. Still not forgotten.', 'That favour has its own line now.', 'The small stuff deserves a place too.'],
     gesture: ['The plan is in writing now. Gently.', 'That promise has a place to live.', 'A promise, saved without a speech.'],
-    square: ['Nothing open. A rare group achievement.', 'The book is quiet. For now.'],
+    square: ['Everything is settled between you.', 'All caught up. Your shared moments stay here.'],
     positive: ['Your side is written down.', 'You covered it. The book kept the details.'],
     negative: ['Your turn is here when you need it.', 'A few lines on your side. No mystery.'],
     owedByMe: ['What did they cover?', 'Cab, snacks, or something else?'],
@@ -20,7 +20,7 @@ const FLAVOUR = {
   female: {
     money: ['The number stayed with the story.', 'The moment and the detail are here together.', 'The detail has a place outside the chat.'],
     favor: ['A small favour can be a whole story.', 'No price tag. Still worth keeping.', 'The little details matter too.'],
-    gesture: ['You said it. Now it has a place.', 'Saved before “did we actually plan that?”', 'This one can stay between you, clearly.'],
+    gesture: ['You said it. Now it has a place.', 'Saved with the plans you made together.', 'This one can stay between you, clearly.'],
     square: ['Everything’s closed. The story stays.', 'Nothing open between your people right now.'],
     positive: ['You covered it. The reason is right here.', 'The amount and the moment stayed together.'],
     negative: ['Your side of the story is here.', 'A few lines are waiting on you, with the details.'],
@@ -32,12 +32,12 @@ const styled = (key, neutral, seed) => pick(FLAVOUR[mode()]?.[key] || neutral, s
 
 const SITUATIONS = [
   { test: /game|gaming|valorant|fifa|esport|lobby/i,
-    lines: ['Game night ended. The snack tab survived.', 'Someone bought the snacks. Now you know who.', 'The score got forgotten. The snack split did not.'] },
+    lines: ['Game night, with the details kept.', 'The snacks from game night, noted.', 'A small part of game night, remembered.'] },
   { test: /grocery|grocer|shopping|market|order|delivery|swiggy|zomato|blinkit|zepto/i,
     lines: ['That shared basket has a place in the book.', 'The shopping detail can wait here.', 'The cart has a line of its own now.'] },
   { test: /dinner|lunch|breakfast|food|pizza|burger|biryani|restaurant|canteen|chai|coffee|snack|brunch/i,
-    lines: ['The moment was the point. This line keeps the detail.', 'The food tab has a place outside the chat.', 'One less “who paid?” later.'],
-    male: ['The food is gone. The split has a line.', 'The table cleared. The detail survived.'],
+    lines: ['Dinner shared. Details kept together.', 'The food tab has a place outside the chat.', 'The meal is remembered, along with who paid.'],
+    male: ['Saved with the meal you shared.', 'Dinner and its details, kept together.'],
     female: ['The moment was better than the maths. Both are here.', 'The good part was being there. The detail is saved.'] },
   { test: /cab|uber|ola|auto|ride|metro|train|bus|petrol|fuel|parking/i,
     lines: ['The ride has a fare. This keeps its context.', 'One ride, one clear line.', 'The travel detail is saved.'],
@@ -50,7 +50,7 @@ const SITUATIONS = [
   { test: /birthday|gift|present|party|trip|holiday|vacation/i,
     lines: ['The plan gets the memories. This keeps the small print.', 'The shared detail has a place now.', 'The details are here with the occasion.'] },
   { test: /lend|lent|borrow|loan|cash|upi|advance/i,
-    lines: ['The lending detail has a date now.', 'Lent it, noted it, still friends.', 'A clear line for money between people.'] },
+    lines: ['The lending detail has a date now.', 'The amount and the person are recorded.', 'A clear line for money between people.'] },
 ];
 
 const GENERIC = [
@@ -62,16 +62,16 @@ const GENERIC = [
 
 export function savedMomentCopy({ kind = 'money', direction = 'owed_to_me', note = '', seed = '' } = {}) {
   if (kind === 'favor') return {
-    title: 'That’s one for the book.',
+    title: 'Favour saved.',
     aside: styled('favor', ['No price tag. Still part of the story.', 'The little things are easy to forget.', 'A favour can stay open without a number.'], seed),
   };
   if (kind === 'gesture') return {
-    title: 'That’s one for the book.',
-    aside: styled('gesture', ['Saved before it becomes “wait, did we say that?”', 'A promise has somewhere to live now.', 'The plan is small. Remembering it matters.'], seed),
+    title: 'Promise saved.',
+    aside: styled('gesture', ['A promise worth remembering.', 'A promise has somewhere to live now.', 'The plan is small. Remembering it matters.'], seed),
   };
   const category = SITUATIONS.find(({ test }) => test.test(note));
   return {
-    title: 'That’s one for the book.',
+    title: 'Saved to your story.',
     aside: category ? pick(category[mode()] || category.lines, seed) : styled('money', GENERIC, seed),
   };
 }
@@ -86,22 +86,22 @@ export function friendQuietCopy({ hasHistory = false, seed = '' } = {}) {
     : { title: 'Nothing on the tab yet', body: pick([
         'First cab, coffee, or “I got this” moment? Put it here.',
         'The next shared chai can start the story.',
-        'No lines yet. That is either excellent planning or day one.',
+        'Start with something you shared recently.',
       ], seed) };
 }
 
 export function homeVerdict({ net = 0, friends = 0, openEntries = 0, seed = '' } = {}) {
-  if (!friends) return 'Add someone. The first line comes when life does.';
+  if (!friends) return 'A place for the little things you share.';
   if (!net && openEntries) return `${openEntries} ${openEntries === 1 ? 'line is' : 'lines are'} still unresolved in your book.`;
   if (!net) return styled('square', ['Nothing open right now.', 'All square, for now.', 'The book is quiet today.'], seed);
-  if (net > 0) return styled('positive', ['Those “I’ll send it” moments, in one place.', 'You covered something. The details are here.', 'Your side of the story is saved.'], seed);
+  if (net > 0) return styled('positive', ['The details from your time together.', 'What you shared, and who was there.', 'The moments stay with the details.'], seed);
   return styled('negative', ['Your side of the tab is right here.', 'A few lines are waiting on you.', 'What you owe, with the details attached.'], seed);
 }
 
 export function moneyNotePrompt({ direction = 'owed_to_me', seed = '' } = {}) {
   return direction === 'owed_by_me'
-    ? styled('owedByMe', ['They covered the cab?', 'Their treat? Or your half?', 'What did they pay for?'], seed)
-    : styled('owedToMe', ['You covered dinner?', 'That “I got this” was for…', 'Coffee, ticket, flat bill?'], seed);
+    ? styled('owedByMe', ['They covered the cab?', 'What did you share?', 'What did they pay for?'], seed)
+    : styled('owedToMe', ['You covered dinner?', 'What was it for?', 'Coffee, ticket, flat bill?'], seed);
 }
 
 export function sharedLineCopy({ kind = 'money', direction = 'owed_to_me', note = '', formattedAmount = '', url = '' } = {}) {

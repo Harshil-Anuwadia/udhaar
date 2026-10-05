@@ -7,7 +7,7 @@ const browser = await chromium.launch({
   args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
 });
 
-const context = await browser.newContext({
+const context = await browser.newContext({ isMobile: true, hasTouch: true,
   viewport: { width: 390, height: 560 },
   isMobile: true,
   hasTouch: true,
@@ -36,20 +36,20 @@ try {
   assert.notEqual(landing.bodyOverflowY, 'hidden', 'bare pages must not lock document scrolling');
   assert.ok(landing.pageScrollHeight >= landing.viewportHeight, 'the landing canvas fits or grows naturally');
   assert.equal(landing.pageScrollWidth, landing.viewportWidth, 'responsive pages must not create horizontal overflow');
-  assert.match(landing.headline, /Who paid.*last time/s, 'the landing has a clear product headline');
-  assert.ok(landing.visualHeight > 100, 'landing artwork remains visible on short screens');
-
-  await page.getByRole('button', { name: 'Log in' }).click();
-  assert.equal(await page.evaluate(() => scrollY), 0, 'each bare-flow step should open at the top');
-  const backLabel = (await page.locator('[data-back]').textContent()).trim();
-  assert.equal(backLabel, 'Back', 'auth back buttons use a clean text treatment without an arrow');
-
-  await page.getByRole('button', { name: 'Back' }).click();
-  await page.getByRole('button', { name: 'Start your ledger' }).click();
+  assert.match(landing.headline, /Welcome back/, 'mobile opens as a login screen');
+  assert.equal(landing.visualHeight, 0, 'decorative desktop artwork does not displace the mobile form');
+  await page.getByRole('button', { name: 'Create an account' }).click();
+  assert.equal((await page.locator('[data-back]').textContent()).trim(), 'Back', 'auth back stays a clean text control');
   await page.locator('#su-name').fill(`Layout ${Date.now()}`);
   await page.locator('[data-next]').click();
   await page.locator('#su-pass').fill('246810');
   await page.locator('[data-go]').click();
+  await page.waitForSelector('#paletteGrid', { timeout: 20_000 });
+  assert.equal(await page.locator('[data-palette]').count(), 3, 'setup offers three deliberate palettes');
+  assert.equal(await page.locator('[data-palette="system"]').count(), 0, 'setup does not inherit the device palette');
+  await page.locator('[data-palette="sage"]').click();
+  assert.equal(await page.locator('[data-palette="sage"]').getAttribute('aria-pressed'), 'true');
+  await page.locator('[data-act="palette-next"]').click();
   await page.waitForSelector('#curGrid', { timeout: 20_000 });
   const currencyLayout = await page.locator('.onboard').evaluate((screen) => {
     const grid = screen.querySelector('.currency-grid').getBoundingClientRect();
@@ -97,6 +97,18 @@ try {
   assert.ok(firstLineLayout.actionBottom <= firstLineLayout.viewportHeight + 1, `first-line actions must be visible on a short phone: ${JSON.stringify(firstLineLayout)}`);
   await page.getByRole('button', { name: 'I’ll log it later' }).click();
   await page.waitForSelector('.netcard', { timeout: 20_000 });
+  const primaryNav = await page.locator('#tabbar').evaluate((nav) => {
+    const action = nav.querySelector('#tabAdd').getBoundingClientRect();
+    const active = nav.querySelector('[aria-current="page"]');
+    return {
+      actionWidth: action.width, actionHeight: action.height,
+      labels: [...nav.querySelectorAll('[data-tab] .tab__label')].map((item) => item.textContent.trim()),
+      activeBackground: active ? getComputedStyle(active).backgroundColor : null,
+    };
+  });
+  assert.ok(primaryNav.actionWidth >= 48 && primaryNav.actionHeight >= 48, 'primary add action keeps a 48px touch target');
+  assert.deepEqual(primaryNav.labels, ['People', 'Groups', 'Alerts', 'You'], 'navigation labels match user destinations');
+  assert.notEqual(primaryNav.activeBackground, 'rgba(0, 0, 0, 0)', 'the active destination is visibly distinguished');
   await page.locator('#tabAdd').click();
   await page.waitForSelector('.who-grid');
 
@@ -161,7 +173,7 @@ try {
   assert.equal(modal.avatarWidth, modal.avatarHeight, 'modal avatars retain a square aspect ratio');
   assert.equal(modal.avatarFlexShrink, '0', 'modal avatars cannot collapse beside long names');
 
-  const narrowContext = await browser.newContext({
+  const narrowContext = await browser.newContext({ isMobile: true, hasTouch: true,
     viewport: { width: 320, height: 568 },
     isMobile: true,
     hasTouch: true,
@@ -175,9 +187,10 @@ try {
   }));
   assert.equal(narrowLanding.scrollWidth, narrowLanding.viewportWidth, 'narrow phones do not get horizontal overflow');
   assert.notEqual(narrowLanding.overflowY, 'hidden', 'narrow phones keep natural page scrolling');
-  await narrowPage.getByRole('button', { name: 'Log in' }).click();
   await narrowPage.waitForSelector('#li-id');
-  assert.equal(await narrowPage.locator('[data-back]').textContent(), 'Back', 'the clean back treatment remains visible on narrow phones');
+  assert.equal(await narrowPage.locator('#li-pass').isVisible(), true, 'narrow phones open directly to both login fields');
+  await narrowPage.getByRole('button', { name: 'Create an account' }).click();
+  assert.equal(await narrowPage.locator('[data-back]').textContent(), 'Back', 'signup keeps the clean back treatment on narrow phones');
   await narrowContext.close();
 
   console.log('layout regression checks passed');

@@ -1,13 +1,13 @@
 /* ==========================================================================
    UDHAAR · design tokens
-   A modern khata: warm paper, ledger ink, vermillion dues, indigo credit.
+   Paper, forest and graphite. Sharp geometry with quiet contrast.
    ========================================================================== */
 
 :root {
   /* ---- type ---- */
-  --font-display: "Instrument Serif", "Recoleta", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --font-display: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-body: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --font-numbers: "DM Sans", ui-sans-serif, system-ui, sans-serif;
 
   --fs-11: 0.6875rem;
   --fs-12: 0.75rem;
@@ -25,14 +25,15 @@
   /* ---- space (4pt) ---- */
   --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px; --s5: 20px;
   --s6: 24px; --s8: 32px; --s10: 40px; --s12: 48px; --s16: 64px;
+  --gutter: clamp(16px, 5vw, 22px);
 
   /* ---- shape ---- */
-  --r-xs: 6px;
-  --r-sm: 11px;
-  --r-md: 15px;
-  --r-lg: 18px;
-  --r-xl: 22px;
-  --r-pill: 999px;
+  --r-xs: 0px;
+  --r-sm: 0px;
+  --r-md: 0px;
+  --r-lg: 0px;
+  --r-xl: 0px;
+  --r-pill: 0px;
 
   /* ---- motion ---- */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -44,13 +45,13 @@
 
   /* ---- elevation ---- */
   --e0: none;
-  --e1: 0 1px 3px rgb(20 16 8 / 0.045), 0 5px 14px -10px rgb(20 16 8 / 0.1);
-  --e2: 0 3px 12px -6px rgb(20 16 8 / 0.14), 0 14px 30px -20px rgb(20 16 8 / 0.2);
-  --e3: 0 12px 44px -18px rgb(20 16 8 / 0.2), 0 30px 70px -38px rgb(20 16 8 / 0.24);
+  --e1: 0 1px 3px rgb(0 0 0 / 0.035);
+  --e2: 0 5px 18px rgb(0 0 0 / 0.055);
+  --e3: 0 16px 46px rgb(0 0 0 / 0.1);
   --e-sheet: 0 -8px 40px -12px rgb(20 16 8 / 0.28);
 
   /* ---- layout ---- */
-  --nav-h: 62px;
+  --nav-h: 70px;
   --header-h: 60px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
@@ -63,47 +64,50 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --paper: #F6F3EC;          /* app background — warm ledger paper */
-  --paper-2: #EAE5D9;        /* recessed */
-  --surface: #FFFEFB;        /* cards */
-  --surface-2: #F8F5EE;
-  --surface-3: #EEE8DC;
+  --paper: #F7F8F5;
+  --paper-2: #F3F4F3;
+  --surface: #FFFFFF;
+  --surface-2: #F1F4EF;
+  --surface-3: #ECEEEC;
 
-  --ink: #1B1A17;
-  --ink-2: #4C4941;
-  --ink-3: #716C60;
-  --ink-4: #938C7E;
+  --ink: #111111;
+  --ink-2: #343736;
+  --ink-3: #626765;
+  --ink-4: #858B88;
 
-  --line: #DED7C9;
-  --line-2: #CDC4B3;
-  --rule: #DED7C9;           /* ledger rule lines */
+  --line: #DFE5DC;
+  --line-2: #CED3CE;
+  --rule: #E4E7E4;
 
-  --credit: #294A8E;         /* you are owed — indigo ink */
-  --credit-bg: #E7ECF8;
-  --credit-ink: #233D79;
+  --credit: #087F5B;         /* you are owed — clear emerald */
+  --credit-bg: #E0F5EA;
+  --credit-ink: #1B5338;
 
-  --due: #B44333;            /* you owe — warm vermillion */
-  --due-bg: #F9E7E1;
-  --due-ink: #943729;
+  --due: #985440;            /* you owe — muted terracotta */
+  --due-bg: #F6EBE6;
+  --due-ink: #7A4131;
 
-  --settled: #39734E;
-  --settled-bg: #E3F0E6;
+  --settled: #228A46;
+  --settled-bg: #E7F9E8;
 
-  --gold: #806025;
-  --gold-bg: #F3E9CE;
-  --gold-bright: #CEAA5C;
+  --gold: #4F6D58;
+  --gold-bg: #E8EEE7;
+  --gold-bright: #B1C8B6;
 
   --warn: #8A6207;
   --warn-bg: #F8EBCC;
 
-  --due-fill: #B44333;      /* button-grade fills: deep enough for ivory text */
-  --credit-fill: #294A8E;
+  --due-fill: #985440;
+  --credit-fill: #087F5B;
 
-  --accent: #1B1A17;
-  --on-accent: #F8F5EE;
+  --accent: #111111;
+  --on-accent: #FFFFFF;
+  --brand-green: #65C99B;
+  --brand-forest: #236646;
+  --brand-sage: #9EB4A4;
 
-  --scrim: rgb(27 26 23 / 0.46);
-  --shadow-ink: rgb(27 26 23 / 0.10);
+  --scrim: rgb(0 0 0 / 0.46);
+  --shadow-ink: rgb(0 0 0 / 0.08);
   --highlight: rgb(255 255 255 / 0.7);
 }
 
@@ -112,47 +116,48 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Warm charcoal, never dead black: the paper glows a half-step under OLED. */
-  --paper: #15130F;
-  --paper-2: #0F0D0A;
-  --surface: #211D17;
-  --surface-2: #29241D;
-  --surface-3: #332C22;
+  --paper: #111713;
+  --paper-2: #0B0C0B;
+  --surface: #1B1D1B;
+  --surface-2: #242724;
+  --surface-3: #303430;
 
-  /* Four readable steps of warm ivory ink. */
-  --ink: #F6F1E8;
-  --ink-2: #D5CDBE;
-  --ink-3: #A8A08F;
-  --ink-4: #807766;
+  --ink: #F8FAF7;
+  --ink-2: #D6DDD6;
+  --ink-3: #AEB7AE;
+  --ink-4: #869086;
 
-  --line: #393227;
-  --line-2: #4B4233;
-  --rule: #393227;
+  --line: #343A34;
+  --line-2: #4C554C;
+  --rule: #343A34;
 
-  /* Periwinkle credit, ember due — both tuned for dark backgrounds. */
-  --credit: #ABC0ED;
-  --credit-bg: #242C43;
-  --credit-ink: #D4E0FA;
+  /* Sage credit, clay due — both tuned for dark backgrounds. */
+  --credit: #79DDB0;
+  --credit-bg: #163D2C;
+  --credit-ink: #C7E5D0;
 
-  --due: #F2A18E;
-  --due-bg: #43251E;
-  --due-ink: #FFC7B7;
+  --due: #E4AF9C;
+  --due-bg: #3C2C26;
+  --due-ink: #F2D0C3;
 
   --settled: #A4D2AE;
   --settled-bg: #1C3425;
 
-  --gold: #E5C888;
-  --gold-bg: #3A301B;
-  --gold-bright: #EBCF91;
+  --gold: #B1D1BB;
+  --gold-bg: #26382C;
+  --gold-bright: #B1D1BB;
 
   --warn: #E8BE62;
   --warn-bg: #342A10;
 
-  --due-fill: #B74A3A;
-  --credit-fill: #496397;
+  --due-fill: #905340;
+  --credit-fill: #2E7050;
 
-  --accent: #F6F1E8;
-  --on-accent: #15130F;
+  --accent: #F8FAF7;
+  --on-accent: #111713;
+  --brand-green: #79DDB0;
+  --brand-forest: #A4CEB2;
+  --brand-sage: #9EB4A4;
 
   --scrim: rgb(0 0 0 / 0.66);
   --shadow-ink: rgb(0 0 0 / 0.55);
@@ -163,25 +168,23 @@
   --e-sheet: 0 -10px 50px -12px rgb(0 0 0 / 0.75);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root[data-theme="system"] {
-    color-scheme: dark;
-    --paper: #15130F; --paper-2: #0F0D0A; --surface: #211D17; --surface-2: #29241D; --surface-3: #332C22;
-    --ink: #F6F1E8; --ink-2: #D5CDBE; --ink-3: #A8A08F; --ink-4: #807766;
-    --line: #393227; --line-2: #4B4233; --rule: #393227;
-    --credit: #ABC0ED; --credit-bg: #242C43; --credit-ink: #D4E0FA;
-    --due: #F2A18E; --due-bg: #43251E; --due-ink: #FFC7B7;
-    --settled: #A4D2AE; --settled-bg: #1C3425;
-    --gold: #E5C888; --gold-bg: #3A301B; --gold-bright: #EBCF91;
-    --warn: #E8BE62; --warn-bg: #342A10;
-    --due-fill: #B74A3A; --credit-fill: #496397;
-    --accent: #F6F1E8; --on-accent: #15130F;
-    --scrim: rgb(0 0 0 / 0.66); --shadow-ink: rgb(0 0 0 / 0.55); --highlight: rgb(255 255 255 / 0.06);
-    --e1: 0 1px 2px rgb(0 0 0 / 0.5);
-    --e2: 0 2px 8px rgb(0 0 0 / 0.5), 0 10px 24px -10px rgb(0 0 0 / 0.65);
-    --e3: 0 10px 30px -8px rgb(0 0 0 / 0.65), 0 30px 60px -24px rgb(0 0 0 / 0.75);
-    --e-sheet: 0 -10px 50px -12px rgb(0 0 0 / 0.75);
-  }
+/* Sage is a deliberate, muted alternative to paper — never device-driven. */
+:root[data-theme="sage"] {
+  color-scheme: light;
+  --paper: #EFF4EF; --paper-2: #E4ECE4; --surface: #FFFFFF;
+  --surface-2: #F5F8F4; --surface-3: #DDE8DE;
+  --ink: #172419; --ink-2: #334839; --ink-3: #5E7163; --ink-4: #7A8E7E;
+  --line: #D7E5D4; --line-2: #BED2BA; --rule: #D7E5D4;
+  --credit: #236646; --credit-bg: #E7F0E9; --credit-ink: #1B5338;
+  --due: #985440; --due-bg: #F6EBE6; --due-ink: #7A4131;
+  --settled: #397354; --settled-bg: #DCEDE1;
+  --gold: #4F6D58; --gold-bg: #E8EEE7; --gold-bright: #B1C8B6;
+  --warn: #87631B; --warn-bg: #F4EBCF;
+  --due-fill: #985440; --credit-fill: #236646;
+  --accent: #172419; --on-accent: #FFFFFF;
+  --brand-green: #28734E; --brand-forest: #236646; --brand-sage: #9EB4A4;
+  --scrim: rgb(29 43 36 / .45); --shadow-ink: rgb(29 43 36 / .12);
+  --highlight: rgb(255 255 255 / .76);
 }
 
 /* ============================== RESET ================================== */
@@ -218,6 +221,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-variant-numeric: lining-nums tabular-nums;
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -246,9 +250,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
 
 /* Numeric alignment everywhere money appears */
 .num {
-  font-family: var(--font-mono);
+  font-family: var(--font-numbers);
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings: "tnum" 1, "lnum" 1;
   letter-spacing: -0.02em;
 }
 
@@ -341,6 +345,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
   border: 1px solid var(--btn-bd);
   border-radius: var(--r-md);
   font-size: var(--fs-15); font-weight: 600; letter-spacing: -0.01em;
+  line-height: 1.25; text-align: center;
   transition: transform var(--t-fast) var(--ease-out), background var(--t-med), border-color var(--t-med), box-shadow var(--t-med), opacity var(--t-fast);
   user-select: none; touch-action: manipulation;
   position: relative; overflow: hidden;
@@ -360,7 +365,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .btn--quiet { --btn-bg: transparent; --btn-bd: transparent; color: var(--ink-2); }
 .btn--quiet:active { background: var(--surface-3); }
 .btn--outline { --btn-bg: transparent; }
-.btn--sm { min-height: 40px; padding: var(--s2) var(--s3); font-size: var(--fs-14); }
+.btn--sm { min-height: 44px; padding: var(--s2) var(--s3); font-size: var(--fs-14); }
 .btn--lg { min-height: 52px; padding: var(--s3) var(--s5); font-size: var(--fs-15); }
 .btn--block { width: 100%; }
 

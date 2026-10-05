@@ -22,7 +22,7 @@ export async function viewYou({ outlet, isCurrent = () => true }) {
   if (hadCache) {
     mount(outlet, 'app', () => youHTML(state.user, cachedStats, null, { links: [], used: 0 }), (main) => bindYou(main, cachedStats, null, { links: [], used: 0 }));
   } else {
-    mount(outlet, 'app', () => `<div class="profile-head"><div class="skeleton" style="width:96px;height:96px;border-radius:50%"></div></div><div class="card skeleton" style="height:200px"></div>`);
+    mount(outlet, 'app', () => `<div class="profile-head"><div class="skeleton" style="width:96px;height:96px;border-radius:0"></div></div><div class="card skeleton" style="height:200px"></div>`);
   }
 
   // Fetch fresh data — all 3 in parallel
@@ -46,7 +46,7 @@ function youHTML(u, stats, card, invites) {
   const cur = u.currency;
   const t = stats.totals;
   const prefs = loadPrefs();
-  const themeName = u.theme === 'dark' ? 'Dark' : u.theme === 'light' ? 'Light' : 'System';
+  const themeName = u.theme === 'dark' ? 'Ink' : u.theme === 'sage' ? 'Sage' : 'Paper';
   const voiceName = u.voiceMode === 'male' ? 'Deadpan' : u.voiceMode === 'female' ? 'Conversational' : 'Original';
 
   return `
@@ -66,8 +66,6 @@ function youHTML(u, stats, card, invites) {
   <div class="account-quick anim-rise" aria-label="Account actions">
     <button class="account-quick__action" data-act="theme">${Icon.palette}<span>Appearance<small>${themeName} · change</small></span></button>
     <button class="account-quick__action" data-act="currency" aria-label="Change currency, currently ${esc(cur)}"><b class="currency-glyph" aria-hidden="true">${esc(symbol(cur))}</b><span>Currency<small>${esc(cur)} · change</small></span></button>
-    <button class="account-quick__action" data-act="export">${Icon.fileExport}<span>Export ledger<small>Keep a copy</small></span></button>
-    <button class="account-quick__action" data-act="logout">${Icon.logout}<span>Sign out<small>On this device</small></span></button>
   </div>
 
   <section class="anim-rise" style="animation-delay:100ms">
@@ -80,16 +78,8 @@ function youHTML(u, stats, card, invites) {
     </div>
   </section>
 
-  <section class="card account-book anim-rise" style="padding:var(--s5);animation-delay:40ms">
-    <div class="row-between" style="align-items:flex-start;gap:var(--s4)">
-      <div>
-        <div class="field__label">Your book</div>
-        <h2 class="serif" style="font-size:var(--fs-24);line-height:1.15;margin:var(--s1) 0">Little things, kept together.</h2>
-        <p class="tiny muted">The people and lines you’ve actually added.</p>
-      </div>
-      <span style="color:var(--gold);flex:0 0 auto" aria-hidden="true">${Icon.ledger}</span>
-    </div>
-    <div class="divider" style="margin:var(--s4) 0"></div>
+  <section class="account-book anim-rise">
+    <div class="section-head"><h2>Your book</h2></div>
     <div class="statgrid">
       <div class="stat"><b class="num">${t.friends}</b><span>Your people</span></div>
       <div class="stat"><b class="num">${t.openEntries}</b><span>Open lines</span></div>
@@ -103,12 +93,12 @@ function youHTML(u, stats, card, invites) {
     <div class="section-head"><h2>Sharing</h2></div>
     <div class="list">
       <button class="setrow" data-act="card" type="button">
-        <span class="setrow__icon setrow__icon--indigo">${Icon.ledger}</span>
+        <span class="setrow__icon">${Icon.share}</span>
         <span class="setrow__main"><span class="setrow__label">Ledger snapshot</span><span class="setrow__sub">Preview your balance and choose what to share</span></span>
         <span class="setrow__value">${Icon.chevR}</span>
       </button>
       <button class="setrow" data-act="invite" type="button">
-        <span class="setrow__icon">${Icon.people}</span>
+        <span class="setrow__icon">${Icon.send}</span>
         <span class="setrow__main"><span class="setrow__label">Invite someone</span><span class="setrow__sub">Send a link to share a ledger</span></span>
         <span class="setrow__value">${Icon.chevR}</span>
       </button>
@@ -122,12 +112,13 @@ function youHTML(u, stats, card, invites) {
   <section class="anim-rise">
     <div class="section-head"><h2>Privacy & account</h2></div>
     <div class="list">
+      ${setRow('export', Icon.fileExport, 'Export ledger', 'Download a copy of your entries')}
       ${setRow('privacy', Icon.shield, 'Privacy', 'Your data, your call', 'row', false, '', 'indigo')}
+      ${setRow('logout', Icon.logout, 'Sign out', 'Only on this phone')}
       ${setRow('delete', Icon.trash, 'Delete everything', '', 'row', false, '', 'red')}
     </div>
   </section>
 
-  <p class="tiny center dim" style="padding:var(--s4) 0 var(--s8)">udhaar · the little things between us</p>
   `;
 }
 
@@ -211,33 +202,35 @@ function bindYou(main, stats, card, invites) {
 }
 
 function themeSheet() {
-  const current = document.documentElement.dataset.theme || 'system';
+  const current = document.documentElement.dataset.theme || 'light';
   actionSheet({
-    title: 'Appearance',
-    actions: ['system', 'light', 'dark'].map((t) => ({
-      label: t === 'system' ? 'Match my phone' : t === 'light' ? 'Paper (light)' : 'Ink (dark)',
-      hint: t === 'system' ? 'Switches with your device' : t === 'light' ? 'Warm khata paper' : 'For 2am ledgers',
-      icon: current === t ? Icon.checkCircle : Icon.settings,
-      onSelect: async () => {
-        const previous = state.user.theme || 'system';
+    title: 'Your palette',
+    sub: 'A deliberate choice, never switched by your phone.',
+    actions: [
+      { id: 'light', label: 'Paper', hint: 'Soft paper, clear contrast' },
+      { id: 'sage', label: 'Sage', hint: 'Soft green, easy on the eyes' },
+      { id: 'dark', label: 'Ink', hint: 'Graphite with forest-green accents' },
+    ].map(({ id: t, label, hint }) => ({
+      label, hint, selected: current === t, icon: Icon.palette,
+      onSelect: () => {
+        const previous = state.user.theme || 'light';
         const optimisticUser = { ...state.user, theme: t };
         applyTheme(t);
         setState({ user: optimisticUser, theme: t });
         bus.emit('user', optimisticUser);
-        toast(`${t === 'system' ? 'System' : t} theme.`);
+        toast(`${label} palette.`);
         navigate('/you');
-        try {
-          const res = await api.patchProfile({ theme: t });
+        api.patchProfile({ theme: t }).then((res) => {
           setState({ user: res.user });
           bus.emit('user', res.user);
-        } catch (error) {
+        }).catch((error) => {
           const restored = { ...state.user, theme: previous };
           applyTheme(previous);
           setState({ user: restored, theme: previous });
           bus.emit('user', restored);
           toastError(error.message || 'Could not save that appearance.');
           navigate('/you');
-        }
+        });
       },
     })),
   });
@@ -250,8 +243,8 @@ function voiceSheet() {
     sub: 'Just the examples and asides. Pick what sounds like you; change it anytime.',
     actions: [
       { id: 'neutral', label: 'Original', hint: 'Plain, warm, a little dry' },
-      { id: 'male', label: 'Deadpan', hint: 'Male-coded group chaos and dry humour' },
-      { id: 'female', label: 'Conversational', hint: 'Female-coded social details and warmth' },
+      { id: 'male', label: 'Deadpan', hint: 'Short, understated, with dry humour' },
+      { id: 'female', label: 'Conversational', hint: 'Warm, natural, and conversational' },
     ].map(({ id, label, hint }) => ({
       label, hint, icon: Icon.sound, selected: current === id,
       onSelect: async () => {
@@ -355,44 +348,61 @@ export async function openCardSheet(card) {
     rows,
   };
 
-  data.rowImages = await loadRowImages(rows);
+  // Open immediately with private initials; photos load only for an explicit reveal.
+  data.rowImages = {};
+  const photosReady = loadRowImages(rows).then(images => { data.rowImages = images; });
   const privateRows = rows.map((r) => ({ ...r, name: r.name[0] + '•'.repeat(Math.max(2, r.name.length - 1)) }));
   const canvas = drawLedgerCard({ ...data, rows: privateRows, rowImages: {} });
-  canvas.style.cssText = 'width:100%;border:1px solid var(--line);border-radius:var(--r-lg)';
+  canvas.className = 'snapshot-preview__canvas';
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('aria-label', `${data.headline} ${data.amountText}. Names and photos hidden.`);
 
   const hideNames = h('button', { class: 'snapshot-privacy', type: 'button', 'aria-pressed': 'false' });
   hideNames.setAttribute('aria-pressed', 'true');
-  hideNames.innerHTML = `<span><strong>Names hidden</strong><small>Tap to include people.</small></span><span class="switch" aria-hidden="true"></span>`;
+  hideNames.innerHTML = `<span><strong>Names hidden</strong><small>Other people’s names and photos stay off your card.</small></span><span class="switch" aria-hidden="true"></span>`;
 
   const body = h('div', { class: 'col', style: { gap: 'var(--s3)' } });
-  body.append(hideNames, canvas);
+  const preview = h('div', { class: 'snapshot-preview' }, [canvas]);
+  body.append(preview, hideNames);
 
   let blurred = true;
+  function renderPreview() {
+    const c2 = drawLedgerCard({ ...data, rowImages: blurred ? {} : data.rowImages, rows: blurred ? privateRows : data.rows });
+    c2.className = canvas.className;
+    c2.setAttribute('role', 'img');
+    c2.setAttribute('aria-label', `${data.headline} ${data.amountText}. ${blurred ? 'Names and photos hidden.' : 'Names and photos visible.'}`);
+    cardCanvas.el.replaceWith(c2);
+    cardCanvas.el = c2;
+  }
   hideNames.addEventListener('click', () => {
     blurred = !blurred;
     buzz(6);
     hideNames.setAttribute('aria-pressed', String(blurred));
     hideNames.querySelector('strong').textContent = blurred ? 'Names hidden' : 'Names visible';
-    hideNames.querySelector('small').textContent = blurred ? 'Tap to include people.' : 'Tap to hide before sharing.';
-    const c2 = drawLedgerCard({ ...data, rowImages: blurred ? {} : data.rowImages, rows: blurred ? privateRows : data.rows });
-    c2.style.cssText = canvas.style.cssText;
-    canvas.replaceWith(c2);
-    cardCanvas.el = c2;
+    hideNames.querySelector('small').textContent = blurred ? 'Other people’s names and photos stay off your card.' : 'Other people’s names and photos will be shared.';
+    renderPreview();
   });
   const cardCanvas = { el: canvas };
+  photosReady.then(() => { if (!blurred && preview.isConnected) renderPreview(); });
 
   const foot = h('div', { class: 'col', style: { gap: 'var(--s2)' } });
-  const shareBtn = h('button', { class: 'btn btn--primary btn--lg btn--block', type: 'button', html: `${Icon.share} Share card` });
+  const canShareImage = !!navigator.canShare?.({ files:[new File([''], 'udhaar-card.png', { type:'image/png' })] });
+  const shareLabel = `${canShareImage ? Icon.send : Icon.download} ${canShareImage ? 'Share snapshot' : 'Save image'}`;
+  const shareBtn = h('button', { class: 'btn btn--primary btn--lg btn--block', type: 'button', html: shareLabel });
   shareBtn.onclick = async () => {
-    shareBtn.disabled = true; shareBtn.innerHTML = '<span class="btn__spinner"></span> Rendering…';
-    const res = await shareCanvas(cardCanvas.el, {
-      title: 'My udhaar ledger',
-      text: `${data.headline} ${data.amountText}. ${plural(card.openEntries, 'line')} still open in my book.`,
-    });
-    shareBtn.disabled = false; shareBtn.innerHTML = `${Icon.share} Share card`;
-    if (res.ok && res.via === 'share') { buzz([10, 30, 10]); s.close(); }
-    else if (res.ok) toastOk('Card saved to your downloads.');
-    else if (res.reason !== 'cancelled') toast('Could not share the image. Try the text version.', { action: 'Copy text', onAction: () => copyText(res.text || '') });
+    shareBtn.disabled = true; hideNames.disabled = true;
+    shareBtn.innerHTML = '<span class="btn__spinner"></span> Preparing image…';
+    try {
+      if (!blurred) { await photosReady; renderPreview(); }
+      const res = await shareCanvas(cardCanvas.el, {
+        title: 'My udhaar ledger',
+        text: `${data.headline} ${data.amountText}. ${plural(card.openEntries, 'line')} still open in my book.`,
+      });
+      if (res.ok && res.via === 'share') { buzz([10, 30, 10]); s.close(); }
+      else if (res.ok) toastOk('Card saved to your downloads.');
+      else if (res.reason !== 'cancelled') toastError('Couldn’t prepare the image. You can copy the summary below.');
+    } catch { toastError('Couldn’t prepare the image. Try again or copy the summary.'); }
+    finally { shareBtn.disabled = false; hideNames.disabled = false; shareBtn.innerHTML = shareLabel; }
   };
 
   const textBtn = h('button', { class: 'btn btn--outline btn--block', type: 'button', html: `${Icon.copy} Copy summary` });
@@ -403,7 +413,7 @@ export async function openCardSheet(card) {
   };
 
   foot.append(shareBtn, textBtn);
-  const s = new Sheet({ title: 'Ledger snapshot', sub: 'Choose what to show before sharing.', body, footer: foot });
+  const s = new Sheet({ title: 'Your book, in a picture.', sub: canShareImage ? 'A little snapshot for your conversations.' : 'Save your snapshot, then share it in any conversation.', body, footer: foot });
   s.open();
 }
 

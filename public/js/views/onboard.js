@@ -1,11 +1,11 @@
-/* Onboarding: three screens, under a minute, straight to the holy-shit moment. */
+import { Art } from '../ui/art.js';
+/* Onboarding: four focused screens, with explicit colour choice before the first line. */
 
 import { h, esc, buzz, money, symbol, withSymbol, avatarHTML, sleep } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
-import { Art } from '../ui/art.js';
 import { openLightbox } from '../ui/lightbox.js';
 import { api } from '../core/api.js';
-import { state, setState, bus } from '../core/store.js';
+import { state, setState, bus, applyTheme } from '../core/store.js';
 import { mount } from './view.js';
 import { navigate } from '../core/router.js';
 import { toast, toastOk, toastError } from '../ui/toast.js';
@@ -24,20 +24,71 @@ const LIKELY = [
   { name: 'Someone I lent money to', hint: 'and it’s been a while' },
 ];
 
+const PALETTES = [
+  { id: 'light', name: 'Paper', note: 'Soft paper, clear contrast', paper: '#F7F8F5', ink: '#111111', accent: '#087F5B' },
+  { id: 'sage', name: 'Sage', note: 'Soft green, easy on the eyes', paper: '#EFF4EF', ink: '#172419', accent: '#28734E' },
+  { id: 'dark', name: 'Ink', note: 'Graphite with forest-green accents', paper: '#111713', ink: '#F8FAF7', accent: '#70AD89' },
+];
+
 export async function viewOnboard({ outlet }) {
   if (!state.user) return navigate('/auth');
-  mount(outlet, 'bare', () => step1HTML(), (main) => bindStep1(main, outlet));
+  mount(outlet, 'bare', () => paletteHTML(), (main) => bindPalette(main, outlet));
 }
 
-function stepper(n, total = 3) {
-  return `<div class="setup-progress">${BrandMark()}<div class="stepper" aria-label="Step ${n} of ${total}">${Array.from({ length: total }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</div></div>`;
+function stepper(n, total = 4) {
+  return `<div class="setup-progress">${BrandMark()}<div class="setup-progress__right"><span class="setup-progress__count">${n} / ${total}</span><div class="stepper" aria-label="Step ${n} of ${total}">${Array.from({ length: total }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</div></div></div>`;
+}
+
+function paletteHTML() {
+  const selected = state.user.theme === 'dark' || state.user.theme === 'sage' ? state.user.theme : 'light';
+  return `<div class="auth onboard onboard--palette route-swap">
+    ${stepper(1)}
+    <div class="onboard__intro">
+      <p class="field__label">Make it yours</p>
+      <h1>Pick your palette.</h1>
+      <p class="small muted">Your ledger, your colours. Change them any time in Account.</p>
+    </div>
+    <div class="onboard__section palette-options" id="paletteGrid" aria-label="Colour palette">
+      ${PALETTES.map((p) => `<button class="palette-option" type="button" data-palette="${p.id}" aria-pressed="${p.id === selected}" style="--palette-paper:${p.paper};--palette-ink:${p.ink};--palette-accent:${p.accent}">
+        <span class="palette-option__preview" aria-hidden="true"><i></i><b></b><em></em></span>
+        <span class="palette-option__copy"><strong>${p.name}</strong><small>${p.note}</small></span>
+        <span class="palette-option__check" aria-hidden="true">${Icon.check}</span>
+      </button>`).join('')}
+    </div>
+    <div class="col onboard__actions"><button class="btn btn--primary btn--lg btn--block" data-act="palette-next">Continue</button></div>
+  </div>`;
+}
+
+function bindPalette(main, outlet) {
+  let selected = state.user.theme === 'dark' || state.user.theme === 'sage' ? state.user.theme : 'light';
+  main.querySelectorAll('[data-palette]').forEach((button) => button.addEventListener('click', () => {
+    selected = button.dataset.palette;
+    buzz(6);
+    applyTheme(selected);
+    main.querySelectorAll('[data-palette]').forEach((option) => option.setAttribute('aria-pressed', String(option === button)));
+  }));
+  main.querySelector('[data-act="palette-next"]').addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.innerHTML = '<span class="btn__spinner"></span> Saving…';
+    try {
+      const { user } = await api.patchProfile({ theme: selected });
+      setState({ user, theme: selected });
+      applyTheme(selected);
+      mount(outlet, 'bare', () => step1HTML(), (screen) => bindStep1(screen, outlet));
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = 'Continue';
+      toastError(error.message || 'Could not save that palette. Try again.');
+    }
+  });
 }
 
 function step1HTML() {
   const cur = state.user.currency || 'INR';
   return `
   <div class="auth onboard onboard--currency route-swap">
-    ${stepper(1)}
+    ${stepper(2)}
     <div class="onboard__art">${Art.coins()}</div>
     <div class="onboard__intro">
       <h1>What money are we tracking?</h1>
@@ -89,7 +140,7 @@ function bindStep1(main, outlet) {
 function step2HTML() {
   return `
   <div class="auth onboard onboard--person route-swap">
-    ${stepper(2)}
+    ${stepper(3)}
     <div class="onboard__art">${Art.duo()}</div>
     <div class="onboard__intro">
       <h1>Who’s in the story?</h1>
@@ -113,7 +164,6 @@ function step2HTML() {
 
     <div class="col onboard__actions">
       <button class="btn btn--primary btn--lg btn--block" data-act="next" disabled>Add them</button>
-      <button class="btn btn--quiet btn--block" data-act="demo" style="color:var(--ink-3)">Skip — fill it with a demo ledger</button>
     </div>
   </div>`;
 }
@@ -148,30 +198,13 @@ function bindStep2(main, outlet) {
     }
   });
 
-  main.querySelector('[data-act="demo"]').addEventListener('click', async (e) => {
-    const b = e.currentTarget;
-    b.disabled = true; b.innerHTML = '<span class="btn__spinner"></span> Writing four friends into your book…';
-    try {
-      await api.demo();
-      await api.onboarded();
-      const me = await api.me();
-      setState({ user: me.user });
-      buzz([10, 30, 10, 30, 18]);
-      confetti({ count: 26, originY: 0.3 });
-      navigate('/', { replace: true });
-    } catch (err) {
-      b.disabled = false; b.textContent = 'Skip — fill it with a demo ledger';
-      toastError(err.message);
-    }
-  });
 }
 
 function step3HTML(friend) {
   const cur = state.user.currency;
   return `
   <div class="auth onboard onboard--first route-swap">
-    ${stepper(3)}
-    <div class="onboard__art">${Art.pen()}</div>
+    ${stepper(4)}
     <div class="onboard__intro">
       <h1>Put the first one down</h1>
       <p class="small muted" style="max-width:34ch">Think of the last cab, coffee, or “I’ll get the next one.”</p>
@@ -225,7 +258,7 @@ function bindStep3(main, outlet, friend) {
       const sheet = new Sheet({
         title: `What does ${esc(friend.name)} owe?`,
         body: `<div class="col" style="gap:var(--s3)">
-          <input class="input num" id="ob-custom" inputmode="numeric" placeholder="0" style="font-size:var(--fs-30);text-align:center;font-family:var(--font-mono)" data-autofocus>
+          <input class="input num" id="ob-custom" inputmode="numeric" placeholder="0" style="font-size:var(--fs-30);text-align:center;font-family:var(--font-numbers)" data-autofocus>
           <input class="input" id="ob-note" placeholder="What was it for?" maxlength="140">
         </div>`,
         footer: h('button', { class: 'btn btn--primary btn--lg btn--block', text: 'Use this', onclick: () => {
@@ -284,7 +317,7 @@ export async function viewJoin({ outlet, query, isCurrent = () => true }) {
     return navigate('/auth');
   }
 
-  mount(outlet, 'bare', () => `<div class="auth"><div class="col" style="margin:auto;align-items:center;gap:var(--s4)"><div class="skeleton" style="width:96px;height:96px;border-radius:50%"></div><div class="skeleton" style="width:200px;height:24px"></div></div></div>`);
+  mount(outlet, 'bare', () => `<div class="auth"><div class="col" style="margin:auto;align-items:center;gap:var(--s4)"><div class="skeleton" style="width:96px;height:96px;border-radius:0"></div><div class="skeleton" style="width:200px;height:24px"></div></div></div>`);
 
   let info;
   try { info = await api.invite(token); }
@@ -393,7 +426,7 @@ export async function viewJoin({ outlet, query, isCurrent = () => true }) {
       try {
         const res = await api.signup({ name, handle: '', secret, contact: '', currency: 'INR' });
         setState({ user: res.user });
-        document.documentElement.dataset.theme = res.user.theme || 'system';
+        applyTheme(res.user.theme || 'light');
         bus.emit('signed-in', res.user);
         const claim = await api.claim(token);
         await api.onboarded();

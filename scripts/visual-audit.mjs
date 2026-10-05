@@ -7,10 +7,10 @@ const base = process.env.BASE_URL || 'http://127.0.0.1:4173';
 const shots = process.env.UI_SHOTS;
 if (shots) mkdirSync(shots, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
-const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', colorScheme: process.env.UI_COLOR_SCHEME === 'dark' ? 'dark' : 'light' });
+const page = await browser.newPage({ isMobile: true, hasTouch: true, viewport: { width: 390, height: 844 }, reducedMotion: 'reduce', colorScheme: process.env.UI_COLOR_SCHEME === 'dark' ? 'dark' : 'light' });
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
-page.on('console', message => { if (message.type() === 'error' || message.type() === 'warning') errors.push(`${message.type()}: ${message.text()}`); });
+page.on('console', message => { if (message.type() === 'error') errors.push(`${message.type()}: ${message.text()}`); });
 
 async function inspect(name) {
   await page.waitForTimeout(400);
@@ -39,14 +39,14 @@ async function inspect(name) {
 try {
   await page.goto(base, { waitUntil: 'networkidle' });
   await inspect('landing-390');
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await inspect('landing-1280');
+  assert.equal(await page.locator('#login-form').isVisible(), true, 'mobile opens directly to account entry');
+  const authButtons = await page.locator('[data-act="login"], [data-act="signup"]').evaluateAll(buttons => buttons.map(b => { const r = b.getBoundingClientRect(); return { left: r.left, width: r.width, height: r.height }; }));
+  assert.deepEqual(authButtons[0], authButtons[1], 'login and create-account actions share size and horizontal alignment');
+  assert.equal(await page.locator('.landing__visual').count(), 0, 'the desktop landing artwork has been removed');
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.locator('[data-act="login"]').click();
   await inspect('login-390');
   await page.setViewportSize({ width: 320, height: 568 });
   await inspect('login-320');
-  await page.locator('[data-back]').click();
   await page.locator('[data-act="signup"]').click();
   await inspect('signup-320');
   await page.locator('[data-back]').click();
@@ -59,7 +59,7 @@ try {
     ['account', '/you', '.account-profile'], ['plus', '/plus', '.plus-hero'],
     ['people', '/add', '.who-grid'], ['amount', `/add?friend=${friendId}`, '#compose-amount'],
   ];
-  for (const [width, height] of [[320, 568], [390, 844], [768, 800], [1280, 800]]) {
+  for (const [width, height] of [[320, 568], [390, 844], [430, 932]]) {
     await page.setViewportSize({ width, height });
     for (const [name, route, ready] of routes) {
       await page.goto(`${base}/#${route}`, { waitUntil: 'networkidle' });

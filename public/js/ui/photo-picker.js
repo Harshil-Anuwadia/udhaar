@@ -30,7 +30,7 @@ export function photoPicker({ id, label, photos = [], onChange, inputAttrs = {} 
       });
       const img = h('img', { alt: '' });
       img.src = url;
-      tile.append(img, h('span', { class: 'photo-picker__remove', text: '×', 'aria-hidden': 'true' }));
+      tile.append(img, h('span', { class: 'photo-picker__remove', html: Icon.close, 'aria-hidden': 'true' }));
       grid.append(tile);
     });
     grid.hidden = selected.length === 0;

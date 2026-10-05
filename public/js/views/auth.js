@@ -2,10 +2,10 @@
 
 import { h, esc, buzz, sleep, setCurrency } from '../core/utils.js';
 import { api, hasSession } from '../core/api.js';
-import { setState, bus } from '../core/store.js';
+import { setState, bus, applyTheme } from '../core/store.js';
 import { toast, toastError } from '../ui/toast.js';
 import { Sheet } from '../ui/sheet.js';
-import { LandingPreview, Wordmark, BrandMark } from './art.js';
+import { Wordmark, BrandMark } from './art.js';
 import { Art } from '../ui/art.js';
 import { navigate } from '../core/router.js';
 import { mount } from './view.js';
@@ -23,20 +23,21 @@ function shell(mode, query) {
     </header>
 
     <section class="landing__copy" aria-labelledby="landing-title">
-      <h1 id="landing-title">Who paid<br>last time?</h1>
-      <p>The cab. The borrowed charger. The photos someone promised. Keep the little things between people in one place.</p>
+      <p class="landing__eyebrow">THE LITTLE THINGS BETWEEN YOU</p>
+      <h1 id="landing-title">Welcome back.</h1>
+      <p>Pick up where you left off.</p>
     </section>
-
-    <div class="landing__visual">${LandingPreview()}</div>
 
     <div class="landing__actions auth__actions">
       ${inviteToken ? `<div class="install-nudge" id="inviteBanner"><span class="grow small"><b>You’ve got a ledger invite.</b> Join to see the shared line.</span></div>` : ''}
-      <div class="landing__cta-row">
-        <button class="btn btn--primary btn--block" data-act="signup">Start your ledger</button>
-        <button class="btn btn--outline btn--block" data-act="login">Log in</button>
-      </div>
+      <form class="auth-entry" id="login-form">
+        <div class="field"><label class="field__label" for="li-id">Handle, phone or email</label><input class="input" id="li-id" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="@yourname" required></div>
+        <div class="field"><label class="field__label" for="li-pass">Passcode</label><input class="input" id="li-pass" name="password" type="password" autocomplete="current-password" placeholder="Your passcode" required><span class="field__error" id="err-secret" role="alert"></span></div>
+        <button class="btn btn--primary btn--block" data-act="login" type="submit">Log in</button>
+      </form>
+      <div class="auth-entry__join"><button class="btn btn--outline btn--block" data-act="signup" type="button">Create an account</button></div>
       <button class="landing__demo" data-act="demo">Take a look first</button>
-      <p class="landing__assurance">Free to start · No email needed</p>
+      <p class="landing__assurance">Money, favours, and moments. Kept together.</p>
     </div>
   </div>`;
 }
@@ -52,8 +53,25 @@ export function bindAuth(outlet, query) {
     buzz(6);
 
     if (act === 'signup') return openSignup(outlet, inviteToken, inviteCode);
-    if (act === 'login') return openLogin(outlet, inviteToken);
+    if (act === 'login') return; // Native form validation and Enter share the submit handler.
     if (act === 'demo') return startDemo(outlet, btn);
+  });
+
+  outlet.querySelector('#login-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const btn = outlet.querySelector('[data-act="login"]');
+    if (btn.disabled) return;
+    clearErrors(outlet);
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn__spinner"></span> Opening your ledger…';
+    try {
+      const res = await api.login({ id: outlet.querySelector('#li-id').value.trim(), secret: outlet.querySelector('#li-pass').value });
+      await onSession(res, { invited: inviteToken });
+    } catch (error) {
+      btn.disabled = false;
+      btn.textContent = 'Log in';
+      fieldError(outlet, 'secret', error.message || 'Could not sign you in. Try again.');
+    }
   });
 
   if (inviteCode) {
@@ -93,7 +111,7 @@ function openSignup(outlet, inviteToken, inviteCode = null) {
         <input class="input input--hero" id="su-name" name="name" autocomplete="given-name" placeholder="e.g. Riya" maxlength="40" data-autofocus>
         <span class="field__error" id="err-name"></span>
       </div>
-      <div class="authstep__scene">${Art.book()}</div>
+      <div class="authstep__scene">${Art.duo()}</div>
       <div class="authstep__foot">
         <button class="btn btn--primary btn--lg btn--block" data-next type="button">Continue</button>
       </div>
@@ -113,10 +131,10 @@ function openSignup(outlet, inviteToken, inviteCode = null) {
         <label class="field__label" for="su-pass">Passcode</label>
         <input class="input input--hero input--pass num" id="su-pass" name="secret" type="password" inputmode="numeric" placeholder="••••••" autocomplete="new-password" maxlength="40" data-autofocus>
         <span class="field__error" id="err-secret"></span>
-        <div class="row" style="gap:0;background:var(--surface-2);border:1.5px solid var(--line);border-radius:var(--r-md);padding-left:14px">
-          <span class="num" style="color:var(--ink-4);font-size:var(--fs-16)">@</span>
-          <input class="input" id="su-handle" name="handle" style="border:0;background:transparent;min-height:47px" placeholder="handle (optional)" maxlength="20" autocomplete="off" autocapitalize="none" spellcheck="false">
-        </div>
+        <label class="handle-input" for="su-handle">
+          <span class="num" aria-hidden="true">@</span>
+          <input class="input" id="su-handle" name="handle" aria-label="Handle (optional)" placeholder="handle (optional)" maxlength="20" autocomplete="off" autocapitalize="none" spellcheck="false">
+        </label>
         <span class="field__error" id="err-handle"></span>
         <details class="small" style="color:var(--ink-3)" ${inviteCode ? 'open' : ''}>
           <summary style="cursor:pointer;font-weight:600">Recovery or invite code (optional)</summary>
@@ -126,7 +144,6 @@ function openSignup(outlet, inviteToken, inviteCode = null) {
           </div>
         </details>
       </div>
-      <div class="authstep__scene">${Art.seal()}</div>
       <div class="authstep__foot">
         ${inviteToken ? '<div class="install-nudge"><span class="grow small"><b>Shared ledger invite.</b> Your accounts will link when you join.</span></div>' : ''}
         <button class="btn btn--primary btn--lg btn--block" data-go type="button">Create my ledger</button>
@@ -181,92 +198,6 @@ function openSignup(outlet, inviteToken, inviteCode = null) {
   show1();
 }
 
-/* --------------------------------- login --------------------------------- */
-
-function openLogin(outlet, inviteToken = null) {
-  const land = () => mount(outlet, 'bare', () => shell('home', { join: inviteToken }), (m) => bindAuth(m, { join: inviteToken }));
-  const d = { id: '' };
-
-  const step1 = () => `
-    <div class="auth authstep step-anim-r">
-      <div class="authstep__head">
-        <button class="authstep__back" data-back type="button">Back</button>
-        ${stepperHTML(1)}
-      </div>
-      <div class="authstep__intro">
-        <h1 class="authstep__prompt">Your tabs missed you</h1>
-        <p class="authstep__sub">Use the handle, phone or email linked to your account.</p>
-      </div>
-      <div class="authstep__form">
-        <label class="field__label" for="li-id">Handle, phone or email</label>
-        <input class="input input--hero" id="li-id" placeholder="@riya" autocapitalize="none" autocorrect="off" autocomplete="username" data-autofocus>
-        <span class="field__error" id="err-id"></span>
-      </div>
-      <div class="authstep__scene">${Art.key()}</div>
-      <div class="authstep__foot">
-        <button class="btn btn--primary btn--lg btn--block" data-next type="button">Continue</button>
-      </div>
-    </div>`;
-
-  const step2 = () => `
-    <div class="auth authstep step-anim-r">
-      <div class="authstep__head">
-        <button class="authstep__back" data-backstep type="button">Back</button>
-        ${stepperHTML(2)}
-      </div>
-      <div class="authstep__intro">
-        <h1 class="authstep__prompt">One last thing</h1>
-        <p class="authstep__sub">Signing in as ${esc(d.id)}.</p>
-      </div>
-      <div class="authstep__form">
-        <label class="field__label" for="li-pass">Your passcode</label>
-        <input class="input input--hero input--pass num" id="li-pass" type="password" inputmode="numeric" placeholder="••••••" autocomplete="current-password" maxlength="40" data-autofocus>
-        <span class="field__error" id="err-secret"></span>
-      </div>
-      <div class="authstep__scene">${Art.unlock()}</div>
-      <div class="authstep__foot">
-        <button class="btn btn--primary btn--lg btn--block" data-go type="button">Sign in</button>
-      </div>
-    </div>`;
-
-  const show1 = () => mount(outlet, 'bare', step1, (m) => {
-    m.querySelector('[data-back]').addEventListener('click', () => { buzz(6); land(); });
-    const input = m.querySelector('#li-id');
-    const next = () => {
-      d.id = input.value.trim();
-      if (!d.id) return fieldError(m, 'id', 'Enter your handle.');
-      buzz(6); show2();
-    };
-    m.querySelector('[data-next]').addEventListener('click', next);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') next(); });
-  });
-
-  const show2 = () => mount(outlet, 'bare', step2, (m) => {
-    m.querySelector('[data-backstep]').addEventListener('click', () => { buzz(6); show1(); });
-    const go = async () => {
-      clearErrors(m);
-      const secret = m.querySelector('#li-pass').value;
-      const btn = m.querySelector('[data-go]');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="btn__spinner"></span> opening…';
-      try {
-        const res = await api.login({ id: d.id, secret });
-        buzz([10, 40, 14]);
-        await onSession(res, { invited: inviteToken });
-      } catch (e) {
-        btn.disabled = false;
-        btn.textContent = 'Sign in';
-        if (e.code === 'bad_credentials') fieldError(m, 'secret', e.message);
-        else toastError(e.message || 'Could not sign you in.');
-      }
-    };
-    m.querySelector('[data-go]').addEventListener('click', go);
-    m.querySelector('#li-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-  });
-
-  show1();
-}
-
 /* ------------------------------ demo ledger ------------------------------ */
 
 async function startDemo(outlet, btn) {
@@ -303,9 +234,9 @@ function stepperHTML(n, total = 2) {
 /* -------------------------------- helpers -------------------------------- */
 
 async function onSession(res, opts = {}) {
-  setState({ user: res.user, theme: res.user.theme || 'system' });
+  setState({ user: res.user, theme: res.user.theme || 'light' });
   setCurrency(res.user.currency);
-  document.documentElement.dataset.theme = res.user.theme || 'system';
+  applyTheme(res.user.theme || 'light');
   bus.emit('signed-in', res.user);
   if (opts.invited) {
     if (!res.user.onboarded) {

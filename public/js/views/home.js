@@ -2,8 +2,6 @@
 
 import { h, $, esc, buzz, money, symbol, withSymbol, relTime, dueLabel, shortMoney, avatarHTML, plural, clamp, currencyCode } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
-import { Art } from '../ui/art.js';
-import { BrandMark } from '../ui/brand.js';
 import { api } from '../core/api.js';
 import { state, setState, bus } from '../core/store.js';
 import { mount, setHeader, showFab } from './view.js';
@@ -12,20 +10,12 @@ import { toast, toastOk, toastError } from '../ui/toast.js';
 import { actionSheet, confirmSheet, Sheet } from '../ui/sheet.js';
 import { confetti } from '../ui/confetti.js';
 
-import { openRecord } from './add.js';
-import { openShareCard } from './share.js';
 import { homeVerdict } from '../core/voice.js';
 
 const KIND_ICON = { money: 'rupee', favor: 'hands', gesture: 'heart' };
 
 export async function viewHome({ outlet, isCurrent = () => true }) {
-  setHeader({
-    title: `<span class="brand-header">${BrandMark()}<span>udhaar<span style="color:var(--due)">.</span></span></span><span class="desktop-home-title">Ledger</span>`,
-    actions: [
-      { label: 'Share my ledger', icon: Icon.share, onClick: () => openShareCard() },
-      { label: 'Settings', icon: Icon.settings, onClick: () => navigate('/you') },
-    ],
-  });
+  setHeader({ title: 'People', sub: 'The people behind the little things' });
   showFab(true);
 
   // Instant paint from cache — zero skeleton flash on revisit
@@ -82,17 +72,14 @@ function homeHTML({ friends }, stats) {
     .sort((a, b) => Math.abs(b.net) - Math.abs(a.net) || b.openCount - a.openCount);
 
   const rest = friends.filter((f) => !(f.net !== 0 || f.openCount > 0 || f.disputedCount > 0));
+  const recent = friends.filter(f => f.lastEntry?.note?.trim())
+    .sort((a, b) => Number(b.lastEntry.created_at) - Number(a.lastEntry.created_at))[0];
 
 
   return `
   ${state.user?.isDemo ? '<span class="tag tag--warn demo-indicator">Preview ledger · sample data</span>' : ''}
-  <div class="home-actions anim-rise" aria-label="Ledger actions">
-    <button class="btn btn--primary" data-act="record">${Icon.plus} Add a line</button>
-    <button class="btn btn--outline" data-act="addfriend">${Icon.people} Add a person</button>
-  </div>
-  <section class="ledger-page netcard anim-rise" aria-label="Your net position">
-    <div class="netcard__stamp" style="color:${stampColor}">${stamp}</div>
-    <div class="netcard__label">Money between people</div>
+  <section class="ledger-page netcard netcard--${zero ? 'zero' : positive ? 'positive' : 'negative'} anim-rise" aria-label="Your net position">
+    <div class="netcard__heading"><div class="netcard__label">Your balance</div><div class="netcard__stamp" style="color:${stampColor}">${stamp}</div></div>
     <div class="netcard__amount" style="color:${zero ? 'var(--ink)' : positive ? 'var(--credit)' : 'var(--due)'}">
       <span class="cur">${symbol(cur)}</span><span class="num" data-count="${Math.abs(net)}">${money(Math.abs(net), cur)}</span>
     </div>
@@ -113,48 +100,52 @@ function homeHTML({ friends }, stats) {
   ${t.overdue > 0 ? `
   <button class="card overdue-row anim-rise" data-act="overdue" style="animation-delay:100ms">
       <span class="overdue-row__ico">${Icon.alert}</span>
-      <span class="grow small" style="color:var(--due-ink);text-align:left"><b>${plural(t.overdue, 'entry', 'entries')} past its date</b> <span class="dim" style="color:inherit;opacity:.7">· tap to review</span></span>
+      <span class="grow small" style="color:var(--due-ink);text-align:left"><b>${t.overdue} overdue ${t.overdue === 1 ? 'entry' : 'entries'}</b> <span class="dim" style="color:inherit;opacity:.7">· tap to review</span></span>
       ${Icon.chevR}
     </button>` : ''}
 
-  <section style="animation-delay:120ms" class="anim-rise">
-    <div class="section-head">
-      <h2>${people.length ? 'Open with your people' : 'No people yet'}</h2>
+  <section style="animation-delay:120ms" class="people-section anim-rise">
+    <div class="section-head home-actions">
+      <div><h2>Your people <span class="people-count">${friends.length}</span></h2>${people.length ? `<p class="tiny muted">${plural(people.length, 'open tab')}</p>` : ''}</div>
+      ${friends.length ? `<button class="btn btn--outline btn--sm people-add" data-act="addfriend">${Icon.plus} Add a person</button>` : ''}
     </div>
 
     ${people.length ? `<div class="list" id="peopleList">
       ${people.map((f) => personRow(f, cur)).join('')}
-    </div>` : emptyPeople(friends.length)}
+    </div>` : friends.length ? `<div class="people-status">${Icon.checkCircle}<div><h3>All caught up</h3><p>No open balances between you.</p></div></div><div class="list">${rest.map(f => personRow(f, cur, true)).join('')}</div>` : emptyPeople(false)}
   </section>
 
-  ${rest.length ? `
+  ${rest.length && people.length ? `
   <section class="anim-rise">
-    <div class="section-head"><h2>Square</h2><span class="tiny dim">${rest.length}</span></div>
+    <div class="section-head"><h2>Settled</h2><span class="tiny dim">${rest.length}</span></div>
     <div class="list">
       ${rest.slice(0, 6).map((f) => personRow(f, cur, true)).join('')}
       ${rest.length > 6 ? `<button class="person" data-act="allpeople" style="justify-content:center;color:var(--ink-3);font-size:var(--fs-13);font-weight:600">Show all ${rest.length}</button>` : ''}
     </div>
   </section>` : ''}
 
-  ${friends.length === 0 ? '' : `
-  <button class="card invite-row anim-rise" data-act="invite" style="margin-top:var(--s3)">
-      <span class="invite-row__art">${Art.invite()}</span>
-      <span class="grow small muted" style="text-align:left">The group chat has people. Your ledger should too. <b style="color:var(--ink-2)">Add someone.</b></span>
+  ${recent ? `<section class="story-section">
+    <div class="section-head"><h2>Pick up the story</h2><span class="tiny muted">Recently saved</span></div>
+    <button class="story-recent" data-person="${esc(recent.id)}">
+      <span class="story-recent__icon" aria-hidden="true">${Icon.ledger}</span>
+      <span class="grow"><strong>${esc(recent.lastEntry.note)}</strong><small>${esc(recent.name)} · ${esc(relTime(recent.lastEntry.created_at))}</small></span>
       ${Icon.chevR}
-    </button>`}
+    </button>
+  </section>` : ''}
+
   `;
 }
 
 function emptyPeople(hasFriends) {
   return `
-  <div class="card">
+  <div class="people-empty ${hasFriends ? 'people-empty--settled' : ''}">
     <div class="empty">
-      <div class="empty__art empty__art--icon">${Icon.ledger}</div>
+      <div class="empty__art empty__art--icon">${hasFriends ? Icon.checkCircle : Icon.people}</div>
       <h3>${hasFriends ? 'All caught up' : 'It starts with one person'}</h3>
       <p>${hasFriends
         ? 'No open balances. The next cab or coffee can go here when it happens.'
-        : 'You know the friend who says “I’ll send it later.” Add them now; sort the details later.'}</p>
-      <button class="btn btn--primary" data-act="${hasFriends ? 'record' : 'addfriend'}">${hasFriends ? 'Add a line' : 'Add your first person'}</button>
+        : 'Add someone you share life with. Keep the money, favours, and memories together.'}</p>
+      ${hasFriends ? '' : '<button class="btn btn--primary" data-act="addfriend">Add your first person</button>'}
     </div>
   </div>`;
 }
@@ -170,7 +161,7 @@ function personRow(f, cur, square = false) {
 
   return `
   <button class="person" data-person="${f.id}" data-name="${esc(f.name)}">
-    ${avatarHTML({ name: f.name, seed: f.avatar_seed, size: 40 })}
+      ${avatarHTML({ name: f.name, seed: f.avatar_seed, size: 40, avatarUrl: f.avatarUrl })}
     <span class="person__main">
       <span class="person__name">
         ${esc(f.name)}
@@ -207,8 +198,6 @@ function bindHome(main, { friends }, stats) {
       const act = el.dataset.act;
       buzz(8);
       if (act === 'addfriend') return openAddFriend();
-      if (act === 'record') return openRecord();
-      if (act === 'invite') return openInvite(friends);
       if (act === 'overdue') return openOverdue();
       if (act === 'allpeople') return openAllPeople(friends);
     });
@@ -240,7 +229,7 @@ export function openAddFriend({ onAdded } = {}) {
   form.innerHTML = `
     <div class="field">
       <label class="field__label" for="af-name">What do you call them?</label>
-      <input class="input" id="af-name" placeholder="Roomie, bestie, Arjun…" maxlength="40" autocomplete="off" data-autofocus>
+      <input class="input" id="af-name" placeholder="Their name or nickname" maxlength="40" autocomplete="off" data-autofocus>
       <span class="field__error" id="err-af-name"></span>
     </div>
     <div class="card" style="padding:var(--s3) var(--s4);display:flex;gap:var(--s3);align-items:flex-start;background:var(--surface-2)">
@@ -311,7 +300,7 @@ export async function openInvite(friends) {
       <div class="card" style="padding:var(--s3) var(--s4);display:flex;align-items:center;gap:var(--s3)">
         <div class="grow wrap">
           <b class="small">${esc(l.name)}</b>
-          <div class="tiny dim truncate" style="font-family:var(--font-mono)">${l.claimed ? 'Connected · only their account can use this link' : url.replace(origin, '')}</div>
+          <div class="tiny dim truncate" style="font-family:var(--font-numbers)">${l.claimed ? 'Connected · only their account can use this link' : url.replace(origin, '')}</div>
         </div>
         <button class="iconbtn" data-copy="${esc(url)}" aria-label="Copy link for ${esc(l.name)}">${Icon.copy}</button>
         <button class="btn btn--sm btn--primary" data-wa="${esc(url)}" data-name="${esc(l.name)}">${l.claimed ? 'Resend' : 'Send'}</button>

@@ -38,9 +38,12 @@ await page.click('[data-next]');
 await page.waitForSelector('#su-pass');
 await page.fill('#su-pass', 'secret99');
 await page.click('[data-go]');
-await page.waitForSelector('.auth .stepper', { timeout: 15000 });
+await page.waitForSelector('#paletteGrid', { timeout: 15000 });
 log('signed up → onboarding');
-await shot(page, '03-onboard-currency');
+await shot(page, '03-onboard-palette');
+await page.click('[data-act="palette-next"]');
+await page.waitForSelector('#curGrid');
+await shot(page, '03b-onboard-currency');
 
 // ---------- 3. onboarding ----------
 await page.click('[data-act="next"]');
@@ -68,7 +71,7 @@ await page.waitForSelector('#compose-amount', { timeout: 10000 });
 await page.click('.chip:has-text("receipt")');
 await page.waitForSelector('.sheet input[type="file"]', { state: 'attached', timeout: 8000 });
 await page.setInputFiles('.sheet input[type="file"]', { name: 'receipt.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAHElEQVR4nGP8z8Dwn4EIwESMwKgIUQ6MwKgIDlEuAObHCRLhI3oVAAAAAElFTkSuQmCC', 'base64') });
-await page.waitForSelector('.entry__photo--lg', { timeout: 8000 });
+await page.waitForSelector('.photo-picker__tile img', { timeout: 8000 });
 await page.click('.sheet__foot .btn'); // done with the fine print
 await page.fill('#compose-amount', '450');
 await page.waitForTimeout(250);

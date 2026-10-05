@@ -1,0 +1,45 @@
+/* Account entry, not a marketing page. Mobile puts the form first. */
+#app.is-bare:has(.auth--landing) { max-width: none; border: 0; }
+.auth.auth--landing {
+  display: grid;
+  grid-template-areas: "nav" "copy" "actions";
+  grid-template-rows: auto auto 1fr;
+  width: min(100%, 460px);
+  min-height: 100dvh;
+  margin: auto;
+  padding: calc(24px + var(--safe-t)) var(--gutter) calc(18px + var(--safe-b));
+  gap: clamp(24px, 5dvh, 42px);
+  background: var(--paper);
+}
+.auth--landing > * { min-width: 0; }
+.landing__nav { grid-area: nav; }
+.landing__nav .brand-mark { width: 30px; height: 30px; }
+.landing__nav .wordmark { font-size: 29px; }
+.landing__copy { grid-area: copy; }
+.landing__eyebrow { color: var(--credit); font-size: 10px; font-weight: 750; letter-spacing: .15em; margin-bottom: 12px; }
+.landing__copy h1 { font-size: clamp(32px, 8vw, 42px); font-weight: 650; line-height: 1.1; letter-spacing: -.045em; }
+.landing__copy h1 + p { margin-top: 10px; color: var(--ink-3); font-size: 15px; }
+.landing__actions.auth__actions { grid-area: actions; position: static; display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0; background: none; box-shadow: none; border: 0; }
+.auth-entry { display: grid; gap: 18px; }
+.auth-entry .input { background: var(--surface-2); min-height: 52px; }
+.auth-entry .btn { min-height: 52px; }
+.auth-entry__join { display: grid; gap: 10px; padding-top: 0; color: var(--ink-3); font-size: 13px; text-align: center; }
+.auth-entry__join .btn { min-height: 52px; font-size: 15px; }
+.auth-entry__join > span { display: none; }
+.handle-input { display: flex; align-items: center; min-width: 0; padding-left: 14px; border: 1px solid var(--line-2); background: var(--surface-2); }
+.handle-input > span { flex: 0 0 auto; color: var(--ink-3); font-size: var(--fs-16); }
+.handle-input .input { border: 0; background: transparent; min-height: 50px; }
+.handle-input:focus-within { border-color: var(--credit); background: var(--surface); box-shadow: 0 0 0 3px color-mix(in srgb, var(--credit) 13%, transparent); }
+.handle-input .input:focus, .handle-input .input:focus-visible { outline: none; box-shadow: none; background: transparent; }
+.handle-input:has([aria-invalid="true"]) { border-color: var(--due); background: var(--due-bg); }
+:root[data-effective="dark"] .handle-input .input { background: transparent; }
+.landing__demo { min-height: 36px; align-self: center; font-size: 13px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 4px; }
+.landing__assurance { text-align: center; font-size: 11px; color: var(--ink-3); margin-top: auto; }
+.auth details summary { list-style: none; }
+.auth details summary::-webkit-details-marker { display: none; }
+@media (max-height: 650px) {
+  .auth.auth--landing { gap: 22px; padding-top: calc(18px + var(--safe-t)); }
+  .landing__actions.auth__actions { gap: 10px; }
+  .auth-entry { gap: 14px; }
+  .landing__eyebrow { margin-bottom: 8px; }
+}

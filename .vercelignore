@@ -1,0 +1,17 @@
+# Never bundle local credentials or personal test data with a deployment.
+.env
+.env.*
+data/
+uploads/
+*.db
+*.db-shm
+*.db-wal
+auth
+auth-wal
+shots/
+public/screens/
+test-*.mjs
+test-*.js
+node_modules/
+.vercel/
+.git/

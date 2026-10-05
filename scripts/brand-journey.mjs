@@ -3,7 +3,7 @@ import { chromium } from 'playwright-core';
 
 const base = process.env.BASE_URL || 'http://127.0.0.1:4173';
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+const page = await browser.newPage({ isMobile: true, hasTouch: true, viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
 
@@ -14,7 +14,7 @@ try {
   const person = await page.locator('.person__name').first().evaluate((el) => el.childNodes[0].textContent.trim());
 
   await page.locator('[data-tab="you"]').click();
-  await page.getByText('Little things, kept together.').waitFor();
+  await page.getByRole('heading', { name:'Your book', exact:true }).waitFor();
   assert.equal(await page.getByText('Your reliability').count(), 0, 'account uses real book facts, not a score');
 
   await page.locator('[data-set="voice"]').click();

@@ -2,7 +2,7 @@
 
 import { h } from '../core/utils.js';
 
-const COLORS = ['#C4372A', '#21409B', '#D9A62E', '#2A7A4B', '#7A3E9D', '#0F6E7A'];
+const COLORS = ['#236646', '#70AD89', '#B1C8B6', '#343736', '#A4CEB2'];
 
 export function confetti({ count = 26, originX = 0.5, originY = 0.4, spread = 0.9 } = {}) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;

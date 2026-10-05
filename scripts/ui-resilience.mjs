@@ -14,7 +14,7 @@ const browser = await chromium.launch({
   headless: true,
   args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
 });
-const context = await browser.newContext({
+const context = await browser.newContext({ isMobile: true, hasTouch: true,
   viewport: { width: 320, height: 568 },
   isMobile: true,
   hasTouch: true,
@@ -43,11 +43,13 @@ try {
   });
   await page.reload({ waitUntil: 'networkidle' });
 
-  await page.getByRole('button', { name: 'Start your ledger' }).click();
+  await page.getByRole('button', { name: 'Create an account' }).click();
   await page.locator('#su-name').fill(`Narrow ${Date.now()}`);
   await page.locator('[data-next]').click();
   await page.locator('#su-pass').fill('246810');
   await page.locator('[data-go]').click();
+  await page.waitForSelector('#paletteGrid', { timeout: 20_000 });
+  await page.locator('[data-act="palette-next"]').click();
   await page.waitForSelector('#curGrid', { timeout: 20_000 });
   if (SHOTS) {
     await page.waitForTimeout(350);
@@ -118,7 +120,7 @@ try {
   assert.equal(bottomReachable, true, 'the final compose controls remain reachable by scrolling');
 
   await page.getByRole('button', { name: 'receipt' }).click();
-  assert.equal(await page.locator('.sheet__body > :first-child .field__label').first().innerText(), 'Receipt (optional)', 'the receipt action opens directly to its photo control');
+  assert.match(await page.locator('.sheet__body > :first-child .field__label').first().innerText(), /Receipt.*optional/i, 'the receipt action opens directly to its photo control');
   const receiptPicker = '.sheet input[type="file"]';
   await page.waitForSelector(receiptPicker, { state: 'attached' });
   const receiptInput = await page.locator(receiptPicker).evaluate((input) => ({
@@ -130,7 +132,7 @@ try {
   assert.equal(receiptInput.hasLabel, true, 'receipt picker needs a native label trigger');
   assert.equal(receiptInput.capture, null, 'receipt picker must allow gallery and file selection');
   await page.setInputFiles(receiptPicker, { name: 'receipt.png', mimeType: 'image/png', buffer: PNG });
-  await page.waitForSelector('.entry__photo--lg img');
+  await page.waitForSelector('.photo-picker__tile img');
   await page.locator('.sheet.is-open .sheet__foot .btn').click();
   await page.locator('.compose__foot .btn').click();
   await page.waitForSelector('.sheet--saved .saved-moment__line', { timeout: 20_000 });
@@ -181,7 +183,7 @@ try {
     assert.ok(row.scrollWidth <= row.width + 1, `settings row content must not overflow: ${JSON.stringify(row)}`);
   }
   await page.locator('[data-act="theme"]').click();
-  await page.getByRole('button', { name: /Ink \(dark\)/ }).click();
+  await page.getByRole('button', { name: /^Ink/ }).click();
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
   await page.locator('[data-act="theme"]').waitFor({ state: 'visible' });
   assert.ok(await page.locator('[data-act="theme"]').isVisible(), 'appearance remains directly accessible after switching theme');

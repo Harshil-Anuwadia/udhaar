@@ -3,7 +3,7 @@ import { chromium } from 'playwright-core';
 
 const base = process.env.BASE_URL || 'http://127.0.0.1:4173';
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-const context = await browser.newContext({ serviceWorkers: 'allow' });
+const context = await browser.newContext({ isMobile: true, hasTouch: true, serviceWorkers: 'allow' });
 const page = await context.newPage();
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));

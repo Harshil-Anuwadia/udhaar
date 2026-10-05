@@ -2,7 +2,6 @@
 
 import { h, $, buzz } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
-import { BrandMark } from '../ui/brand.js';
 import { state, setState, bus } from '../core/store.js';
 import { navigate, currentPath, navDir } from '../core/router.js';
 
@@ -63,14 +62,14 @@ export function buildChrome() {
   const app = $('#app');
   app.innerHTML = `
     <header class="app-header" id="hdr">
-      <div class="row grow" style="gap:10px;min-width:0">
+      <div class="app-header__identity">
         <button class="iconbtn hide" id="hdrBack" aria-label="Back" type="button">${Icon.back}</button>
         <div class="grow wrap" id="hdrTitleWrap">
-          <div class="app-header__title" id="hdrTitle">udhaar<span style="color:var(--due)">.</span></div>
+          <div class="app-header__title" id="hdrTitle"></div>
           <div class="app-header__sub hide" id="hdrSub"></div>
         </div>
       </div>
-      <div class="row" style="gap:2px" id="hdrActions"></div>
+      <div class="app-header__actions" id="hdrActions"></div>
       <span class="route-loading hide" id="routeLoading" role="status" aria-label="Loading page"></span>
     </header>
 
@@ -79,13 +78,11 @@ export function buildChrome() {
     <div id="bare" class="hide"></div>
 
     <nav class="tabbar hide" id="tabbar" aria-label="Primary">
-      <a class="tabbar__brand" href="#/" aria-label="Udhaar — ledger">${BrandMark()}<span>udhaar<span class="tabbar__brand-dot">.</span></span></a>
-      ${tab('home', '/', 'Ledger', 'ledger', 'ledgerFill')}
-      ${tab('groups', '/groups', 'Groups', 'people', 'peopleFill')}
-      <button class="tabbar__add" id="tabAdd" type="button" aria-label="Add a line">${Icon.plus}<span>Add a line</span></button>
-      ${tab('alerts', '/activity', 'Alerts', 'bell', 'bellFill')}
-      ${tab('you', '/you', 'You', 'you', 'youFill')}
-      <p class="tabbar__note">The little things<br>between us.</p>
+      ${tab('home', '/', 'People', 'ledger')}
+      ${tab('groups', '/groups', 'Groups', 'people')}
+      <button class="tabbar__add" id="tabAdd" type="button" aria-label="Add entry">${Icon.plus}</button>
+      ${tab('alerts', '/activity', 'Alerts', 'bell')}
+      ${tab('you', '/you', 'You', 'you')}
     </nav>
   `;
 
@@ -105,7 +102,12 @@ export function buildChrome() {
     navigate(t.dataset.to);
   });
 
-  $('#hdrBack').addEventListener('click', () => { buzz(6); history.length > 1 ? history.back() : navigate('/'); });
+  // Detail headers always return to their own section, even after a deep link.
+  $('#hdrBack').addEventListener('click', () => {
+    buzz(6);
+    const path = currentPath();
+    navigate(path.startsWith('/group/') ? '/groups' : path === '/plus' ? '/you' : '/');
+  });
 
   // Pull to refresh (touch only)
   bindPullToRefresh(main);
@@ -114,33 +116,29 @@ export function buildChrome() {
   bus.on('state:user', syncChrome);
 }
 
-function tab(id, to, label, outline, filled) {
+function tab(id, to, label, iconName) {
   return `
     <a class="tab" data-tab="${id}" data-to="${to}" href="#${to}" role="link">
       <span class="tab__pill"></span>
-      <span class="tab__ico">${Icon[outline]}</span>
+      <span class="tab__ico">${Icon[iconName]}</span>
       <span class="tab__label">${label}</span>
     </a>`;
 }
 
-const TAB_MAP = { '/': 'home', '/friend': 'home', '/groups': 'groups', '/activity': 'alerts', '/you': 'you' };
+const TAB_MAP = { '/': 'home', '/friend': 'home', '/groups': 'groups', '/group': 'groups', '/activity': 'alerts', '/you': 'you', '/plus': 'you' };
 
 export function syncChrome() {
   const path = currentPath();
   const tabbar = $('#tabbar');
   if (!tabbar) return;
 
-  const activeKey = Object.keys(TAB_MAP).find((k) => path === k || (k !== '/' && path.startsWith(k)));
+  const activeKey = Object.keys(TAB_MAP).find((k) => path === k || (k !== '/' && path.startsWith(`${k}/`)));
   const active = activeKey ? TAB_MAP[activeKey] : null;
   tabbar.querySelectorAll('[data-tab]').forEach((el) => {
     const isActive = el.dataset.tab === active;
     el.toggleAttribute('aria-current', isActive);
     if (isActive) el.setAttribute('aria-current', 'page');
     else el.removeAttribute('aria-current');
-    // swap to the filled glyph when active
-    const outline = el.dataset.tab === 'home' ? 'ledger' : el.dataset.tab === 'groups' ? 'people' : el.dataset.tab === 'alerts' ? 'bell' : 'you';
-    const filled = `${outline}Fill`;
-    el.querySelector('.tab__ico').innerHTML = isActive ? Icon[filled] : Icon[outline];
   });
 
   const badge = tabbar.querySelector('[data-tab="alerts"] .tab__badge');

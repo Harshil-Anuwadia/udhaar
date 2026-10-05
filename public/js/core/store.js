@@ -29,7 +29,7 @@ export const state = {
   events: [],
   unread: 0,
   online: navigator.onLine,
-  theme: 'system',
+  theme: 'light',
   queue: 0,
   booted: false,
   installPrompt: null,
@@ -84,17 +84,14 @@ export function savePrefs(patch) {
 
 export function applyTheme(theme) {
   const rootEl = document.documentElement;
-  rootEl.classList.add('theme-anim');
-  rootEl.dataset.theme = theme || 'system';
+  const selected = ['light', 'sage', 'dark'].includes(theme) ? theme : 'light';
+  if (rootEl.dataset.theme !== selected) rootEl.classList.add('theme-anim');
+  rootEl.dataset.theme = selected;
   clearTimeout(rootEl.__themeT);
   rootEl.__themeT = setTimeout(() => rootEl.classList.remove('theme-anim'), 420);
-  const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  const dark = selected === 'dark';
   rootEl.dataset.effective = dark ? 'dark' : 'light';
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = dark ? '#15130F' : '#F6F3EC';
-  savePrefs({ theme });
+  if (meta) meta.content = dark ? '#111713' : selected === 'sage' ? '#EFF4EF' : '#F7F8F5';
+  savePrefs({ theme: selected });
 }
-
-matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
-  if ((document.documentElement.dataset.theme || 'system') === 'system') applyTheme('system');
-});

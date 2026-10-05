@@ -63,7 +63,7 @@ export const GroupSchema = z.object({
 export const ProfileSchema = z.object({
   name: z.string().trim().min(2).max(40).optional(),
   currency: z.enum(['INR', 'USD', 'GBP', 'EUR', 'AED', 'SGD', 'AUD', 'CAD']).optional(),
-  theme: z.enum(['system', 'light', 'dark']).optional(),
+  theme: z.enum(['light', 'dark', 'sage']).optional(),
   voiceMode: z.enum(['neutral', 'male', 'female']).optional(),
   // Plus is a free preview until billing exists. Do not interpret this client
   // setting as proof of payment if a paid plan is introduced later.

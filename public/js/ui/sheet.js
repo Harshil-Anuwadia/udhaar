@@ -1,6 +1,7 @@
 /* Bottom sheet with drag-to-dismiss, focus trap, stack support. */
 
 import { h, buzz } from '../core/utils.js';
+import { Icon } from './icons.js';
 
 const stack = [];
 let scrimEl = null;
@@ -51,7 +52,7 @@ export class Sheet {
       head.append(h('button', {
         class: 'iconbtn', 'aria-label': 'Close', type: 'button',
         onclick: () => this.close(),
-        html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+        html: Icon.close,
       }));
     }
 
@@ -199,7 +200,7 @@ export function actionSheet({ title, sub, actions }) {
         h('span', { class: 'setrow__label', html: a.label }),
         a.hint ? h('span', { class: 'setrow__hint', html: a.hint }) : null,
       ]),
-      a.selected ? h('span', { class: 'setrow__selected', 'aria-label': 'Current selection', text: '✓' })
+      a.selected ? h('span', { class: 'setrow__selected', 'aria-label': 'Current selection', html: Icon.check })
         : a.value ? h('span', { class: 'setrow__value', html: a.value }) : null,
     ]);
     list.append(btn);

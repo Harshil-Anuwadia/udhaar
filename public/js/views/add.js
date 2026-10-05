@@ -3,7 +3,7 @@
    step 2 — the line (amount, direction, note; details tucked away)
    The primary action stays focused while each stage scrolls when required. */
 
-import { h, $, esc, buzz, symbol, withSymbol, avatarHTML, quickAmounts, noteSuggestions, daysBetween, formatDate, currencyCode, formatMoneyInput, applyMoneyInput } from '../core/utils.js';
+import { h, $, esc, buzz, symbol, withSymbol, avatarHTML, quickAmounts, noteSuggestions, daysBetween, formatDate, currencyCode, formatMoneyInput, applyMoneyInput, share } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
 import { api } from '../core/api.js';
 import { state, bus } from '../core/store.js';
@@ -64,8 +64,8 @@ export async function viewAdd({ outlet, query, isCurrent = () => true }) {
   const top = h('div', { class: 'compose__top' });
   const cancel = h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Cancel', html: Icon.close, onclick: () => { buzz(6); exitCompose(); } });
   const dots = h('div', { class: 'stepper', 'aria-label': 'Step 1 of 2' });
-  const spacer = h('span', { style: 'width:38px' }); // balances the cancel button
-  top.append(cancel, dots, spacer);
+  const heading = h('span', { class: 'compose__title', text: 'New entry' });
+  top.append(cancel, heading, dots);
 
   const stage = h('div', { class: 'compose__stage' });
   const foot = h('div', { class: 'compose__foot' });
@@ -362,16 +362,23 @@ function celebrate(res, friend, payload) {
   const done = h('button', { class: 'btn btn--primary btn--block btn--lg', type: 'button', text: 'Back to ledger' });
   done.onclick = () => s.close();
   const send = h('button', { class: 'btn btn--block btn--outline', type: 'button', html: `${Icon.send} Share this line` });
-  send.onclick = () => {
+  send.onclick = async () => {
     buzz([8, 20, 8]);
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+    send.disabled = true;
+    send.innerHTML = '<span class="btn__spinner"></span> Opening…';
+    try {
+      const result = await share({ title:'A line in our udhaar', text:msg });
+      if (result === 'copied') toastOk('Details copied. Paste them into your conversation.');
+      if (result === 'failed') toastError('Couldn’t share. Try Copy details.');
+    } catch { toastError('Couldn’t open sharing. Try Copy details.'); }
+    finally { send.disabled = false; send.innerHTML = `${Icon.send} Share this line`; }
   };
   const copyButton = h('button', { class: 'btn btn--block btn--quiet', type: 'button', html: `${Icon.copy} Copy details` });
   copyButton.onclick = async () => {
     const { copyText } = await import('../core/utils.js');
     const ok = await copyText(msg);
     buzz(8);
-    toast(ok ? 'Copied. The receipts are ready.' : 'Could not copy.', { kind: ok ? 'ok' : 'error' });
+    toast(ok ? 'Details copied.' : 'Could not copy.', { kind: ok ? 'ok' : 'error' });
   };
   const secondary = h('div', { class: 'saved-moment__actionrow' }, [send, copyButton]);
   foot.append(done, secondary);
