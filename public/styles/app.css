@@ -894,75 +894,68 @@ button.alert-row__content:hover { background: var(--surface-2); }
 .switch[aria-checked="true"]::after { translate: 19px 0; }
 
 /* ================================ PLUS =================================== */
-/* UX: Hick's Law — no plan selectors. Cognitive Load — no comparison table.
-   Von Restorff — only the CTA is prominent. Proximity — price block is tight. */
 
-/* Not-yet-Plus layout */
+/* Full-height split: features top, price+CTA pinned to bottom */
 .plus-page {
-  display: flex; flex-direction: column; gap: var(--s5);
+  display: flex; flex-direction: column;
+  min-height: 100%;
 }
-.plus-page__intro h2 {
-  font-size: var(--fs-24); font-weight: 650; letter-spacing: -0.03em; line-height: 1.15;
+.plus-page__top {
+  flex: 1 1 auto;
+  display: flex; flex-direction: column; justify-content: center;
+  padding-bottom: var(--s4);
 }
-.plus-page__intro p {
-  margin-top: 8px; font-size: var(--fs-14); color: var(--ink-2); line-height: 1.6; max-width: 36ch;
+.plus-page__label {
+  font-size: var(--fs-11); font-weight: 700; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: var(--s3);
 }
-
-/* Unlocks list — no card, just a clean list */
 .plus-unlocks {
   list-style: none; margin: 0; padding: 0;
-  display: flex; flex-direction: column; gap: 0;
   border-top: 1px solid var(--line);
 }
 .plus-unlock {
-  display: flex; gap: var(--s3); align-items: flex-start;
-  padding: 14px 0; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: var(--s3);
+  padding: 13px 0; border-bottom: 1px solid var(--line);
+  font-size: var(--fs-15); font-weight: 550; color: var(--ink);
 }
 .plus-unlock__tick {
-  flex: 0 0 22px; width: 22px; height: 22px; margin-top: 1px;
+  flex: 0 0 20px; width: 20px; height: 20px;
   display: grid; place-items: center;
-  background: var(--credit-bg); color: var(--credit);
-  border-radius: 50%;
+  background: var(--credit-bg); color: var(--credit); border-radius: 50%;
 }
-.plus-unlock__tick svg { width: 12px; height: 12px; }
-.plus-unlock__copy { display: flex; flex-direction: column; gap: 2px; }
-.plus-unlock__copy b { font-size: var(--fs-14); font-weight: 650; color: var(--ink); }
-.plus-unlock__copy span { font-size: var(--fs-13); color: var(--ink-3); line-height: 1.4; }
+.plus-unlock__tick svg { width: 11px; height: 11px; }
 
-/* Price block — grouped tightly (Proximity) */
+/* Price block */
 .plus-price-block {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
-  padding: var(--s4) var(--s5);
-  background: var(--surface-2); border-radius: var(--r-md);
-  border: 1px solid var(--line);
+  margin-bottom: var(--s3);
 }
 .plus-price-block__amount {
+  display: block;
   font-size: var(--fs-30); font-weight: 700; letter-spacing: -0.04em; line-height: 1;
   color: var(--ink); font-family: var(--font-numbers);
 }
 .plus-price-block__note {
-  font-size: var(--fs-13); color: var(--ink-3); line-height: 1.4;
+  display: block; margin-top: 4px;
+  font-size: var(--fs-13); color: var(--ink-3);
 }
 
-/* CTA section */
-.plus-cta { display: flex; flex-direction: column; gap: var(--s2); }
+.plus-page__bottom {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; gap: var(--s2);
+  padding-top: var(--s4); border-top: 1px solid var(--line);
+}
 
-/* Already-Plus settled state */
+/* Already on Plus */
 .plus-settled {
-  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3);
+  display: flex; flex-direction: column; gap: var(--s3);
   padding: var(--s5) 0;
 }
 .plus-settled__icon { color: var(--credit); }
 .plus-settled h2 { font-size: var(--fs-24); font-weight: 650; letter-spacing: -0.03em; }
-.plus-settled p { font-size: var(--fs-15); color: var(--ink-2); line-height: 1.6; max-width: 34ch; }
+.plus-settled p { font-size: var(--fs-14); color: var(--ink-2); line-height: 1.5; }
 
-/* Post-purchase welcome sheet (Peak-End Rule) */
-.plus-welcome {
-  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3);
-  padding: var(--s3) 0;
-}
-.plus-welcome__icon { color: var(--credit); }
-.plus-welcome p { font-size: var(--fs-15); color: var(--ink-2); line-height: 1.6; }
+/* Post-purchase sheet */
+.plus-welcome p { font-size: var(--fs-15); color: var(--ink-2); line-height: 1.55; }
 
 
 /* ============================== SHARE CARD =============================== */
