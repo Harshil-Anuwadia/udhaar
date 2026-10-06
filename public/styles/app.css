@@ -4,6 +4,29 @@
 
 /* -------------------------------- shell ---------------------------------- */
 
+/* A quiet, white interlude between setup and the first page of the book. */
+.setup-finish {
+  min-height: 100dvh; box-sizing: border-box; background: #fff; color: #123D2B;
+  padding: max(28px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+.setup-finish__wordmark { font-size: 25px; font-weight: 750; line-height: 1.2; letter-spacing: -.04em; }
+.setup-finish__center { margin-block: auto; padding-block: 28px; width: min(100%, 330px); }
+.setup-finish__art { position: relative; width: 170px; height: 180px; margin: 0 auto 30px; }
+.setup-finish__page { position: absolute; width: 124px; height: 152px; border: 1px solid #CCE0D3; }
+.setup-finish__page--back { left: 32px; top: 6px; background: #EDF5EF; transform: rotate(8deg); animation: setup-page-breathe 3.2s ease-in-out infinite; }
+.setup-finish__page--front { left: 16px; top: 18px; background: #fff; border-left: 5px solid #123D2B; display: flex; align-items: center; flex-direction: column; padding-top: 23px; }
+.setup-finish__art .btn__spinner { width: 64px; height: 64px; flex-basis: 64px; }
+.setup-finish__page i { width: 46px; height: 2px; background: #CCE0D3; margin-top: 16px; }
+.setup-finish__page i + i { width: 28px; margin-top: 8px; }
+.setup-finish h1 { margin: 0; font-family: var(--font-body); font-size: clamp(28px, 8vw, 36px); font-weight: 650; line-height: 1.22; letter-spacing: -.025em; word-spacing: normal; color: #123D2B; outline: none; }
+.setup-finish__status { margin: 20px auto 0; max-width: 290px; font-size: 15px; line-height: 1.65; letter-spacing: 0; word-spacing: normal; text-wrap: balance; color: #55695E; }
+.setup-finish__foot { margin: 0; color: #55695E; font-size: 12px; line-height: 1.5; letter-spacing: 0; }
+.setup-finish [data-retry] { margin: 24px auto 0; background: #123D2B; color: #fff; }
+.setup-finish--paused .btn__spinner::after, .setup-finish--paused .setup-finish__page--back { animation-play-state: paused; }
+@keyframes setup-page-breathe { 50% { transform: translateY(-5px) rotate(12deg); } }
+@media (prefers-reduced-motion: reduce) { .setup-finish__page--back { animation: none; } }
+
 /* App views keep their persistent chrome while main owns the scroll. Bare
    flows (auth, setup, invite) opt out below and grow with the document. */
 html, body {
@@ -52,7 +75,9 @@ img { -webkit-user-drag: none; }
 .app-header__actions:empty { display: none; }
 #hdrBack { margin-left: -10px; flex: 0 0 44px; }
 #hdrActions .iconbtn { margin-right: -10px; }
-.route-loading { position: absolute; right: var(--gutter); bottom: 2px; width: 12px; height: 12px; border: 2px solid var(--ink-3); border-right-color: transparent; border-radius: 50%; animation: spin 700ms linear infinite; }
+.app-header__mark { display: flex; flex: 0 0 28px; }
+.app-header__mark .brand-mark { width: 28px; height: 28px; }
+.app-header__mark .brand-mark * { animation: none; }
 .app-header__title {
   font-size: 22px; font-weight: 650; line-height: 1.25; letter-spacing: -0.035em;
   overflow-wrap: anywhere;
@@ -822,7 +847,8 @@ button.alert-row__content:hover { background: var(--surface-2); }
 .setrow:last-child { border-bottom: 0; }
 .setrow:active { background: var(--surface-2); }
 .setrow.is-working { position: relative; opacity: .72; }
-.setrow.is-working::after { content: ''; grid-column: 3; grid-row: 1 / span 2; justify-self: end; width: 15px; height: 15px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 700ms linear infinite; }
+.setrow.is-working > .btn__spinner { grid-column: 3; grid-row: 1 / span 2; justify-self: end; }
+.setrow.is-working > .setrow__selected, .setrow.is-working > .setrow__value { visibility: hidden; }
 .setrow__icon { width: 32px; height: 32px; border-radius: var(--r-sm); display: grid; place-items: center; background: var(--surface-3); color: var(--ink-2); grid-column: 1; grid-row: 1 / span 2; }
 .setrow__icon svg { width: 17px; height: 17px; }
 .setrow__icon--indigo { background: var(--credit-bg); color: var(--credit-ink); }
@@ -868,50 +894,76 @@ button.alert-row__content:hover { background: var(--surface-2); }
 .switch[aria-checked="true"]::after { translate: 19px 0; }
 
 /* ================================ PLUS =================================== */
+/* UX: Hick's Law — no plan selectors. Cognitive Load — no comparison table.
+   Von Restorff — only the CTA is prominent. Proximity — price block is tight. */
 
-.plus-hero {
-  position: relative; overflow: hidden;
-  padding: var(--s6) var(--s5);
-  background: var(--ink);
-  background:
-    radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--gold-bright) 34%, transparent), transparent 60%),
-    var(--ink);
-  color: var(--paper);
-  border-radius: var(--r-lg);
+/* Not-yet-Plus layout */
+.plus-page {
+  display: flex; flex-direction: column; gap: var(--s5);
 }
-:root[data-effective="dark"] .plus-hero { background: var(--credit-bg); border: 1px solid var(--line-2); color: var(--ink); }
-.plus-hero h2 { font-family: var(--font-body); font-weight: 650; font-size: var(--fs-24); line-height: 1.05; letter-spacing: -0.025em; }
-.plus-hero p { font-size: var(--fs-14); opacity: 0.78; margin-top: 6px; max-width: 30ch; }
-
-.plan {
-  display: flex; align-items: center; gap: var(--s3);
-  padding: var(--s4); border-radius: var(--r-md);
-  border: 1.5px solid var(--line-2); background: var(--surface);
-  transition: all var(--t-fast) var(--ease-out);
-  width: 100%; min-width: 0; text-align: left;
+.plus-page__intro h2 {
+  font-size: var(--fs-24); font-weight: 650; letter-spacing: -0.03em; line-height: 1.15;
 }
-.plan > .grow { min-width: 0; overflow-wrap: anywhere; }
-.plan__price { flex: 0 0 auto; }
-.plan[aria-pressed="true"] { border-color: var(--ink); background: var(--surface-2); box-shadow: var(--e1); }
-.plan__price { font-family: var(--font-display); font-size: var(--fs-30); line-height: 1; }
-.plan__per { display: block; font-size: var(--fs-12); color: var(--ink-3); margin-top: 2px; }
+.plus-page__intro p {
+  margin-top: 8px; font-size: var(--fs-14); color: var(--ink-2); line-height: 1.6; max-width: 36ch;
+}
 
-.feature {
+/* Unlocks list — no card, just a clean list */
+.plus-unlocks {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 0;
+  border-top: 1px solid var(--line);
+}
+.plus-unlock {
   display: flex; gap: var(--s3); align-items: flex-start;
-  padding: 10px 0;
+  padding: 14px 0; border-bottom: 1px solid var(--line);
 }
-.feature__tick {
-  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 0;
+.plus-unlock__tick {
+  flex: 0 0 22px; width: 22px; height: 22px; margin-top: 1px;
   display: grid; place-items: center;
-  background: var(--gold-bg); color: var(--gold);
+  background: var(--credit-bg); color: var(--credit);
+  border-radius: 50%;
 }
-.feature__tick svg { width: 13px; height: 13px; }
-.feature b { display: block; font-size: var(--fs-14); font-weight: 620; }
-.feature span { font-size: var(--fs-13); color: var(--ink-3); line-height: 1.4; }
-.free-feature { display: flex; align-items: center; gap: var(--s3); min-height: 48px; padding: 8px var(--s4); border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: var(--fs-14); line-height: 1.3; }
-.free-feature:last-child { border-bottom: 0; }
-.free-feature__tick { flex: 0 0 22px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 0; background: var(--settled-bg); color: var(--settled); }
-.free-feature__tick svg { width: 13px; height: 13px; }
+.plus-unlock__tick svg { width: 12px; height: 12px; }
+.plus-unlock__copy { display: flex; flex-direction: column; gap: 2px; }
+.plus-unlock__copy b { font-size: var(--fs-14); font-weight: 650; color: var(--ink); }
+.plus-unlock__copy span { font-size: var(--fs-13); color: var(--ink-3); line-height: 1.4; }
+
+/* Price block — grouped tightly (Proximity) */
+.plus-price-block {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: var(--s4) var(--s5);
+  background: var(--surface-2); border-radius: var(--r-md);
+  border: 1px solid var(--line);
+}
+.plus-price-block__amount {
+  font-size: var(--fs-30); font-weight: 700; letter-spacing: -0.04em; line-height: 1;
+  color: var(--ink); font-family: var(--font-numbers);
+}
+.plus-price-block__note {
+  font-size: var(--fs-13); color: var(--ink-3); line-height: 1.4;
+}
+
+/* CTA section */
+.plus-cta { display: flex; flex-direction: column; gap: var(--s2); }
+
+/* Already-Plus settled state */
+.plus-settled {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3);
+  padding: var(--s5) 0;
+}
+.plus-settled__icon { color: var(--credit); }
+.plus-settled h2 { font-size: var(--fs-24); font-weight: 650; letter-spacing: -0.03em; }
+.plus-settled p { font-size: var(--fs-15); color: var(--ink-2); line-height: 1.6; max-width: 34ch; }
+
+/* Post-purchase welcome sheet (Peak-End Rule) */
+.plus-welcome {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3);
+  padding: var(--s3) 0;
+}
+.plus-welcome__icon { color: var(--credit); }
+.plus-welcome p { font-size: var(--fs-15); color: var(--ink-2); line-height: 1.6; }
+
 
 /* ============================== SHARE CARD =============================== */
 
