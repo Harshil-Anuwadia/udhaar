@@ -239,6 +239,52 @@ function bindStep3(main, outlet, friend) {
   const amounts = cur === 'INR' ? [100, 250, 500, 1200, 2500] : [5, 10, 20, 50, 100];
   let amount = 0;
   let note = '';
+  let finishing = false;
+
+  // Entry creation happens only once. Retrying this screen only finishes setup.
+  const openBook = async (hasEntry) => {
+    const splash = mount(outlet, 'bare', () => `<section class="setup-finish" aria-labelledby="setup-finish-title">
+      <div class="setup-finish__wordmark">udhaar.</div>
+      <div class="setup-finish__center">
+        <div class="setup-finish__art" aria-hidden="true">
+          <div class="setup-finish__page setup-finish__page--back"></div>
+          <div class="setup-finish__page setup-finish__page--front"><span class="btn__spinner"></span><i></i><i></i></div>
+        </div>
+        <h1 id="setup-finish-title" tabindex="-1">A place for your<br>little things.</h1>
+        <p class="setup-finish__status" role="status">${hasEntry ? 'Your first line is in. Getting your book ready.' : 'Your people are here. Getting your book ready.'}</p>
+        <button class="btn btn--primary hide" data-retry type="button">Try again</button>
+      </div>
+      <p class="setup-finish__foot">The next chapter is yours.</p>
+    </section>`);
+    splash.querySelector('h1').focus({ preventScroll: true });
+    const retry = splash.querySelector('[data-retry]');
+    const status = splash.querySelector('[role="status"]');
+    const finish = async () => {
+      retry.classList.add('hide');
+      splash.classList.remove('setup-finish--paused');
+      status.textContent = hasEntry ? 'Your first line is in. Getting your book ready.' : 'Your people are here. Getting your book ready.';
+      // Allow the artwork to play out nicely so the user feels the transition.
+      const minimum = sleep(8000);
+      try {
+        await api.onboarded();
+        const me = await api.me();
+        await minimum;
+        if (!splash.isConnected) return;
+        setState({ user: me.user });
+        buzz([12, 40, 16]);
+        navigate('/', { replace: true });
+        if (hasEntry) setTimeout(() => toastOk(`First line written. ${friend.name} owes you ${withSymbol(amount, cur)}.`), 500);
+      } catch {
+        if (!splash.isConnected) return;
+        splash.classList.add('setup-finish--paused');
+        status.textContent = hasEntry ? 'Your first line is saved. We couldn’t open your book yet. Check your connection and try again.' : 'Your people are saved. We couldn’t open your book yet. Check your connection and try again.';
+        retry.classList.remove('hide');
+        retry.focus({ preventScroll: true });
+      }
+    };
+    retry.addEventListener('click', finish);
+    await finish();
+  };
 
   quick.innerHTML = amounts.map((a) => `<button class="quick" data-amt="${a}" type="button">+${symbol(cur)}${money(a, cur)}</button>`).join('')
     + `<button class="quick" data-amt="custom" type="button">Custom…</button>`;
@@ -276,33 +322,32 @@ function bindStep3(main, outlet, friend) {
 
   main.querySelector('[data-act="finish"]').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
+    if (finishing) return;
     if (!amount) {
       toast('Pick an amount — or tap “I’ll log it later”.');
       return buzz([14, 30, 14]);
     }
-    btn.disabled = true; btn.innerHTML = '<span class="btn__spinner"></span> Writing it down…';
+    finishing = true;
+    main.querySelector('[data-act="skip"]').disabled = true;
+    btn.disabled = true; btn.innerHTML = '<span class="btn__spinner" aria-hidden="true"></span> Writing it down…';
     try {
       await api.addEntry({ friendshipId: friend.id, kind: 'money', direction: 'owed_to_me', amount, note: note || 'First line in the book' });
-      await api.onboarded();
-      buzz([12, 40, 16]);
-      confetti({ count: 34, originY: 0.4 });
-      bus.emit('data-changed');
-      const me = await api.me();
-      setState({ user: me.user });
-      navigate('/', { replace: true });
-      setTimeout(() => toastOk(`First line written. ${friend.name} owes you ${withSymbol(amount, cur)}.`), 500);
+      await openBook(true);
     } catch (err) {
+      finishing = false;
+      main.querySelector('[data-act="skip"]').disabled = false;
       btn.disabled = false; btn.textContent = 'Log it and open my ledger';
       toastError(err.message);
     }
   });
 
   main.querySelector('[data-act="skip"]').addEventListener('click', async (event) => {
+    if (finishing) return;
+    finishing = true;
     buzz(6);
     const button = event.currentTarget;
     button.disabled = true; button.innerHTML = '<span class="btn__spinner"></span> Opening…';
-    try { await api.onboarded(); const me = await api.me(); setState({ user: me.user }); } catch {}
-    navigate('/', { replace: true });
+    await openBook(false);
   });
 
   paint();

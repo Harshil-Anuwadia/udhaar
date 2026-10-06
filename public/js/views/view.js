@@ -178,6 +178,8 @@ export function setHeader({ title, sub, back = false, actions = [] }) {
   if (t) t.innerHTML = title ?? '';
   if (s) { s.innerHTML = sub ?? ''; s.classList.toggle('hide', !sub); }
   if (b) b.classList.toggle('hide', !back);
+  const mark = $('.app-header__mark');
+  if (mark) mark.classList.toggle('hide', back);
   if (a) {
     a.innerHTML = '';
     for (const act of actions) {
