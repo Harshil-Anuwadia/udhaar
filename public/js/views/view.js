@@ -2,6 +2,7 @@
 
 import { h, $, buzz } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
+import { BrandMark } from '../ui/brand.js';
 import { state, setState, bus } from '../core/store.js';
 import { navigate, currentPath, navDir } from '../core/router.js';
 
@@ -31,11 +32,18 @@ export function mount(outlet, mode, renderFn, bindFn, { animate } = {}) {
     return screen;
   }
 
+  // Leaving bare (setup/auth) back to the app shell: the body may have
+  // scrolled during onboarding. Reset it NOW — before restoring 100dvh —
+  // so the tabbar is not pushed below the visible viewport.
+  if ($('#app')?.classList.contains('is-bare')) {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }
   showChrome();
   $('#app')?.classList.remove('is-bare');
   $('#bare')?.classList.add('hide');
   const main = $('#main');
   main.classList.remove('main--flush');
+
 
   const path = currentPath();
   const shouldAnimate = animate !== undefined ? animate : (activeScreenPath !== path);
@@ -69,8 +77,8 @@ export function buildChrome() {
           <div class="app-header__sub hide" id="hdrSub"></div>
         </div>
       </div>
+      <span class="app-header__mark" aria-hidden="true">${BrandMark()}</span>
       <div class="app-header__actions" id="hdrActions"></div>
-      <span class="route-loading hide" id="routeLoading" role="status" aria-label="Loading page"></span>
     </header>
 
     <div class="pull-hint" id="pullHint">Release to refresh</div>
