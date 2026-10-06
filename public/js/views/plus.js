@@ -1,4 +1,9 @@
-/* Udhaar Plus */
+/* Udhaar Plus — not a sales screen. Just an honest explanation of what's inside.
+   UX principles applied: Hick's Law (one plan, no choices), Cognitive Load (no
+   comparison tables), Occam's Razor (simplest layout that communicates the offer),
+   Mental Model (lifetime = one payment, clear immediately), Von Restorff (only the
+   CTA stands out), Proximity (price block grouped), Peak-End Rule (effort on the
+   post-purchase state, not on persuasion). */
 
 import { h, esc, buzz, money, symbol } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
@@ -6,18 +11,21 @@ import { api } from '../core/api.js';
 import { state, setState, bus } from '../core/store.js';
 import { mount, setHeader, showFab } from './view.js';
 import { navigate } from '../core/router.js';
-import { toastError } from '../ui/toast.js';
+import { toastError, toastOk } from '../ui/toast.js';
 import { Sheet } from '../ui/sheet.js';
 
 const PRICE_IN    = { lifetime: 49 };
 const PRICE_OTHER = { lifetime: 1 };
 
+// What Plus unlocks — described honestly, no marketing superlatives
 const UNLOCKS = [
-  'Unlimited people',
-  'Every entry saved',
-  'Unlimited groups',
-  'Future Plus updates',
+  { t: 'Unlimited people',        d: 'Free includes 8. Plus has room for every flatmate, trip friend, and plus-one.' },
+  { t: 'Every entry, kept',       d: 'Free holds 120 lines. Plus keeps the canteen tabs and every new one, forever.' },
+  { t: 'Unlimited groups',        d: 'Beyond the 2 that come with free.' },
+  { t: 'All future Plus features',d: 'Anything we add to Plus, you get.' },
 ];
+
+/* ─── Razorpay loader ──────────────────────────────────────────────────────── */
 
 let _rzpLoader = null;
 function preloadRazorpay() {
@@ -30,62 +38,82 @@ function preloadRazorpay() {
     script.onload = resolve;
     script.onerror = () => {
       _rzpLoader = null;
-      reject(new Error('Payment unavailable. Check your connection.'));
+      reject(new Error('Payment gateway unavailable. Check your connection or try disabling your ad blocker.'));
     };
     document.head.appendChild(script);
   });
   return _rzpLoader;
 }
 
+/* ─── View ─────────────────────────────────────────────────────────────────── */
+
 export async function viewPlus({ outlet, isCurrent = () => true }) {
   setHeader({ title: 'Plus', back: true });
   showFab(false);
+  mount(outlet, 'app', () => `<div class="card skeleton" style="height:260px"></div>`);
+
+  // Start loading Razorpay now so it's ready when the user taps
   preloadRazorpay().catch(() => {});
+
   if (!isCurrent()) return;
   mount(outlet, 'app', () => plusHTML(), bind);
 }
 
+/* ─── HTML ─────────────────────────────────────────────────────────────────── */
+
 function plusHTML() {
-  const u      = state.user;
-  const cur    = u?.currency || 'INR';
-  const price  = cur === 'INR' ? PRICE_IN : PRICE_OTHER;
+  const u     = state.user;
+  const cur   = u?.currency || 'INR';
+  const price = cur === 'INR' ? PRICE_IN : PRICE_OTHER;
   const isPlus = u?.plan === 'plus';
 
+  // ── Already a Plus user: confirm their access clearly ──────────────────────
   if (isPlus) {
     return `
     <div class="plus-settled anim-rise">
       <div class="plus-settled__icon">${Icon.checkCircle}</div>
       <h2>You have Plus</h2>
-      <p>Lifetime access. No limits on people, entries, or groups.</p>
+      <p>Lifetime access. Your people, entries, and groups have no limits.</p>
       <a class="btn btn--outline btn--block" href="#/">Back to my ledger</a>
     </div>`;
   }
 
+  // ── Not yet a Plus user: explain what it is, then offer it ─────────────────
   return `
   <div class="plus-page anim-rise">
-    <div class="plus-page__top">
-      <p class="plus-page__label">What you get</p>
-      <ul class="plus-unlocks">
-        ${UNLOCKS.map((label) => `
-        <li class="plus-unlock">
-          <span class="plus-unlock__tick" aria-hidden="true">${Icon.check}</span>
-          <span>${esc(label)}</span>
-        </li>`).join('')}
-      </ul>
+
+    <div class="plus-page__intro">
+      <h2>Udhaar Plus</h2>
+      <p>A one-time payment that removes the limits from your book. No subscription, no renewal — pay once and it's yours.</p>
     </div>
 
-    <div class="plus-page__bottom">
-      <div class="plus-price-block">
-        <span class="plus-price-block__amount num">${symbol(cur)}${money(price.lifetime, cur)}</span>
-        <span class="plus-price-block__note">One-time payment. No subscription.</span>
-      </div>
+    <ul class="plus-unlocks" aria-label="What Plus unlocks">
+      ${UNLOCKS.map((u) => `
+      <li class="plus-unlock">
+        <span class="plus-unlock__tick" aria-hidden="true">${Icon.check}</span>
+        <span class="plus-unlock__copy">
+          <b>${esc(u.t)}</b>
+          <span>${esc(u.d)}</span>
+        </span>
+      </li>`).join('')}
+    </ul>
+
+    <div class="plus-price-block">
+      <span class="plus-price-block__amount num">${symbol(cur)}${money(price.lifetime, cur)}</span>
+      <span class="plus-price-block__note">One-time · Lifetime access · No subscription</span>
+    </div>
+
+    <div class="plus-cta">
       <button class="btn btn--primary btn--lg btn--block" data-act="buy">
         Unlock for ${symbol(cur)}${money(price.lifetime, cur)}
       </button>
-      <p class="tiny muted center">Paid via Razorpay</p>
+      <p class="tiny muted center">Secure payment via Razorpay</p>
     </div>
+
   </div>`;
 }
+
+/* ─── Interactions ─────────────────────────────────────────────────────────── */
 
 function bind(main) {
   main.addEventListener('click', async (e) => {
@@ -107,7 +135,7 @@ function bind(main) {
           amount:      order.amount,
           currency:    order.currency,
           name:        'Udhaar',
-          description: 'Plus. Lifetime access.',
+          description: 'Plus — Lifetime Access',
           order_id:    order.order_id,
           handler: async (response) => {
             btn.innerHTML = '<span class="btn__spinner"></span> Confirming…';
@@ -124,7 +152,7 @@ function bind(main) {
             } catch (err) {
               btn.disabled = false;
               btn.innerHTML = original;
-              toastError('Verification failed. Contact support if money was deducted.');
+              toastError('Payment verification failed. If money was deducted, contact support.');
             }
           },
           modal: {
@@ -138,7 +166,7 @@ function bind(main) {
 
         const rzp = new window.Razorpay(options);
         rzp.on('payment.failed', (response) => {
-          toastError(response.error.description || 'Payment failed. Try again.');
+          toastError(response.error.description || 'Payment failed. Please try again.');
           btn.disabled = false;
           btn.innerHTML = original;
         });
@@ -153,16 +181,20 @@ function bind(main) {
   });
 }
 
+/* ─── Post-purchase state (Peak-End Rule: this is where we invest effort) ─── */
+
 function showPlusWelcome() {
   const s = new Sheet({
     title: 'You have Plus.',
     body: `
     <div class="plus-welcome">
-      <p>Your book now has no limits. Add as many people, entries, and groups as you need.</p>
+      <div class="plus-welcome__icon">${Icon.checkCircle}</div>
+      <p>Your book is now unlimited. Add as many people, entries, and groups as you need.</p>
+      <p class="tiny muted" style="margin-top:var(--s2)">This is a lifetime purchase — it stays with your account forever.</p>
     </div>`,
     footer: [
       h('button', {
-        class: 'btn btn--primary btn--lg btn--block', type: 'button', text: 'Go to my ledger',
+        class: 'btn btn--primary btn--lg btn--block', type: 'button', text: 'Back to my ledger',
         onclick: () => { s.close(); navigate('/'); },
       }),
     ],
