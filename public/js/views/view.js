@@ -71,6 +71,9 @@ export function mountProduct(outlet, renderFn, bindFn, { tabs = true } = {}) {
     root.setAttribute('data-nopull', '');
     const footer = root.querySelector('.product-foot');
     if (footer) root.append(footer);
+    if (root.querySelector('.plus-page, .plus-settled')) root.classList.add('product-screen--plus');
+    if (root.querySelector('.entry-folio')) root.classList.add('product-screen--entry');
+    if (root.querySelector('.payment-intro, .payment-receipt, .payment-success')) root.classList.add('product-screen--payment');
     if (root.querySelector('.review-browser')) root.classList.add('product-screen--review');
     if (root.querySelector('.story-timeline')) root.classList.add('product-screen--story');
     if (!tabs) root.classList.add('product-screen--focused');

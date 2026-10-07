@@ -8,6 +8,7 @@ import { mountProduct, setHeader, showFab } from './view.js';
 import { navigate, currentPath } from '../core/router.js';
 import { toastError, toastOk } from '../ui/toast.js';
 import { Sheet } from '../ui/sheet.js';
+import { PlusArtwork, RecordSeal } from '../ui/product-art.js';
 
 const PRICE_IN    = { lifetime: 49 };
 const PRICE_OTHER = { lifetime: 1 };
@@ -31,9 +32,9 @@ function forgetReceipt(owner) {
 
 // What Plus unlocks — described honestly, no marketing superlatives
 const UNLOCKS = [
-  { t: 'Unlimited people', d: 'Free includes 8 people' },
-  { t: 'Unlimited entries', d: 'Free includes 120 ledger lines' },
-  { t: 'Unlimited groups', d: 'Free includes 2 groups' },
+  { icon: 'people', t: 'Everyone in your life', d: 'Unlimited people · Free includes 8' },
+  { icon: 'ledger', t: 'Every little entry', d: 'Unlimited entries · Free includes 120' },
+  { icon: 'split', t: 'Room for every group', d: 'Unlimited groups · Free includes 2' },
 ];
 
 /* ─── Razorpay loader ──────────────────────────────────────────────────────── */
@@ -64,7 +65,7 @@ export async function viewPlus({ outlet, isCurrent = () => true }) {
   mountProduct(outlet, () => `<div class="card skeleton" style="height:260px"></div>`, null, { tabs: false });
 
   // Start loading Razorpay now so it's ready when the user taps
-  if (!pendingReceipt(state.user?.id)) preloadRazorpay().catch(() => {});
+  if (state.user?.plan !== 'plus' && !pendingReceipt(state.user?.id)) preloadRazorpay().catch(() => {});
 
   if (!isCurrent()) return;
   mountProduct(outlet, plusHTML, bind, { tabs: false });
@@ -79,51 +80,32 @@ function plusHTML() {
   const isPlus = u?.plan === 'plus';
   const pending = pendingReceipt(u?.id);
 
-  // ── Already a Plus user: confirm their access clearly ──────────────────────
-  if (isPlus) {
-    return `
-    <div class="plus-settled" data-product-ready>
-      <div class="plus-settled__icon">${Icon.checkCircle}</div>
-      <h2>You have Plus</h2>
-      <p>Lifetime access. Your people, entries, and groups have no limits.</p>
-    </div><footer class="product-foot"><a class="btn btn--primary btn--block" href="#/">Back to my ledger</a></footer>`;
-  }
-
-  if (pending) {
-    return `<div class="plus-settled" data-product-ready><div class="plus-settled__icon">${Icon.receipt}</div><h2>Finish activating Plus</h2><p>Your payment receipt is saved on this phone. Confirm it to activate lifetime access.</p></div><footer class="product-foot plus-cta"><button class="btn btn--primary btn--lg btn--block" data-act="confirm">Confirm payment</button><p>Uses your saved receipt. You won’t be charged again.</p></footer>`;
-  }
-
-  // ── Not yet a Plus user: explain what it is, then offer it ─────────────────
-  return `
-  <div class="plus-page" data-product-ready>
-
-    <div class="plus-page__intro">
-      <span class="plus-page__mark" aria-hidden="true">${Icon.crown}</span>
-      <h2>Your book,<br>without limits.</h2>
-    </div>
-
-    <ul class="plus-unlocks" aria-label="What Plus unlocks">
-      ${UNLOCKS.map((u) => `
-      <li class="plus-unlock">
-        <span class="plus-unlock__tick" aria-hidden="true">${Icon.check}</span>
-        <span class="plus-unlock__copy">
-          <b>${esc(u.t)}</b>
-          <span>${esc(u.d)}</span>
-        </span>
-      </li>`).join('')}
-    </ul>
-
-  </div>
-    <footer class="product-foot plus-cta">
-      <div class="plus-price-block">
-        <span class="plus-price-block__amount num">${symbol(cur)}${money(price.lifetime, cur)}</span>
-        <span class="plus-price-block__note">Pay once · Lifetime access<br>No subscription or renewal</span>
+  const priceLabel = `${symbol(cur)}${money(price.lifetime, cur)}`;
+  if (isPlus || pending) {
+    return `<section class="plus-settled ${isPlus ? 'plus-settled--active' : 'plus-settled--pending'}" data-product-ready>
+      <div class="plus-membership"><div class="plus-membership__top"><span>UDHAAR <b>PLUS</b></span><span class="plus-membership__status">${isPlus ? Icon.check : Icon.clock}${isPlus ? 'Active' : 'Confirmation pending'}</span></div>
+        <div class="plus-membership__art">${PlusArtwork()}</div>
+        <div class="plus-membership__owner"><span>${isPlus ? 'Lifetime access for' : 'Reserved for'}</span><strong>${esc(u.name)}</strong></div>
       </div>
-      <button class="btn btn--primary btn--lg btn--block" data-act="buy">
-        Get lifetime Plus
-      </button>
-      <p class="tiny muted center">Secure payment via Razorpay</p>
-    </footer>`;
+      <div class="plus-state-copy"><h1>${isPlus ? 'A little more possibility.' : 'One last step.'}</h1><p>${isPlus ? 'Your people, entries, and groups are now unlimited. Your Plus stays with this account.' : 'Your payment receipt is saved. Confirm it to finish activating lifetime Plus.'}</p></div>
+    </section><footer class="product-foot plus-cta">${isPlus ? '<a class="btn btn--primary btn--lg btn--block" href="#/">Back to my ledger '+Icon.chevR+'</a>' : '<button class="btn btn--primary btn--lg btn--block" data-act="confirm">Confirm payment '+Icon.chevR+'</button>'}<p>${isPlus ? Icon.check+' Lifetime access. No renewals.' : Icon.shield+' Uses your saved receipt. No second charge.'}</p></footer>`;
+  }
+
+  return `<div class="plus-page" data-product-ready>
+    <section class="plus-hero" aria-labelledby="plus-title">
+      <div class="plus-hero__eyebrow"><span>The lifetime edition</span><span class="plus-hero__badge" aria-hidden="true">${Icon.plus}</span></div>
+      <h1 id="plus-title">Your book.<br><em>Without limits.</em></h1>
+      <div class="plus-hero__art">${PlusArtwork()}</div>
+    </section>
+    <ul class="plus-unlocks" aria-label="What Plus unlocks">
+      ${UNLOCKS.map(item => `<li class="plus-unlock"><span class="plus-unlock__icon" aria-hidden="true">${Icon[item.icon]}</span><span class="plus-unlock__copy"><b>${esc(item.t)}</b><span>${esc(item.d)}</span></span><span class="plus-unlock__check" aria-hidden="true">${Icon.check}</span></li>`).join('')}
+    </ul>
+  </div>
+  <footer class="product-foot plus-cta">
+    <div class="plus-price-block"><div class="plus-price-block__amount num">${priceLabel}<small>${esc(cur)}</small></div><div class="plus-price-block__note"><strong>Once. Yours for life.</strong><span>No subscription or renewal</span></div></div>
+    <button class="btn btn--primary btn--lg btn--block" data-act="buy">Get lifetime Plus ${Icon.chevR}</button>
+    <p>${Icon.shield} Secure checkout with Razorpay</p>
+  </footer>`;
 }
 
 /* ─── Interactions ─────────────────────────────────────────────────────────── */
@@ -197,7 +179,7 @@ function showPlusWelcome() {
     title: 'You have Plus.',
     body: `
     <div class="plus-welcome">
-      <div class="plus-welcome__icon">${Icon.checkCircle}</div>
+      <div class="plus-welcome__icon">${RecordSeal()}</div>
       <p>Your book is now unlimited. Add as many people, entries, and groups as you need.</p>
       <p class="tiny muted" style="margin-top:var(--s2)">This is a lifetime purchase — it stays with your account forever.</p>
     </div>`,

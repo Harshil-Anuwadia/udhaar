@@ -45,6 +45,17 @@ Routes: `/#/review`, `/#/friend/:id/entry/:entryId`,
   the person’s ledger so remaining lines are visible.
 - Respect dark and sage themes, reduced motion, touch targets, and safe areas.
   These journeys use the existing private-photo viewer and Moment composer.
+- Plus uses an original SVG ledger, receipt, and memory illustration in forest,
+  cream, and sage. Short phones use a compact side composition; taller phones
+  give the illustration more space. Benefit icons distinguish people, entries,
+  and groups. Active and pending accounts receive their own membership card.
+- Amounts share a baseline with their currency symbol. Entry identity and status
+  sit together above the amount, while the note has its own ruled space.
+  Reminder actions have a clear touch target; deletion stays a labeled icon with
+  its existing confirmation. Payment inputs show focus and invalid states.
+- Forest primary fills, readable secondary labels, consistent gutters, and square
+  icon tiles preserve the established identity. Press feedback is local; artwork
+  and receipt checks animate once and honor reduced motion.
 
 ## Verification
 
@@ -56,8 +67,9 @@ check navigation, filters, review Back, partial payment and exact Undo, ambiguou
 save handling, updated balances, private Moments, receipts, empty/error recovery,
 photo focus and restoration, reminder previews, bulk failures, and narrow mobile
 layouts from 320×568 to 430×932. It checks vertical fit, pinned controls, usable
-inner scrolling, readable text after theme changes, and visual-viewport shrink
-and restoration. Set
+inner scrolling, text and functional-icon contrast in light/dark/sage themes,
+visual-viewport shrink and restoration, and finite artwork motion that leaves
+checkout stationary. Plus also covers the compact/tall layout breakpoint. Set
 `PRODUCT_SCREENSHOTS` to save viewport previews. `npm run test:bugs:browser`
 also verifies Plus confirmation retries across reload and the active state on a
 short phone.

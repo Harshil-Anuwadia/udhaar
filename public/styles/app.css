@@ -893,78 +893,6 @@ button.alert-row__content:hover { background: var(--surface-2); }
 .switch[aria-checked="true"] { background: var(--settled); }
 .switch[aria-checked="true"]::after { translate: 19px 0; }
 
-/* ================================ PLUS =================================== */
-/* UX: Hick's Law — no plan selectors. Cognitive Load — no comparison table.
-   Von Restorff — only the CTA is prominent. Proximity — price block is tight. */
-
-/* Not-yet-Plus layout */
-.plus-page {
-  display: flex; flex-direction: column; gap: var(--s5);
-}
-.plus-page__intro h2 {
-  font-size: var(--fs-24); font-weight: 650; letter-spacing: -0.03em; line-height: 1.15;
-}
-.plus-page__intro p {
-  margin-top: 8px; font-size: var(--fs-14); color: var(--ink-2); line-height: 1.6; max-width: 36ch;
-}
-
-/* Unlocks list — no card, just a clean list */
-.plus-unlocks {
-  list-style: none; margin: 0; padding: 0;
-  display: flex; flex-direction: column; gap: 0;
-  border-top: 1px solid var(--line);
-}
-.plus-unlock {
-  display: flex; gap: var(--s3); align-items: flex-start;
-  padding: 14px 0; border-bottom: 1px solid var(--line);
-}
-.plus-unlock__tick {
-  flex: 0 0 22px; width: 22px; height: 22px; margin-top: 1px;
-  display: grid; place-items: center;
-  background: var(--credit-bg); color: var(--credit);
-  border-radius: 50%;
-}
-.plus-unlock__tick svg { width: 12px; height: 12px; }
-.plus-unlock__copy { display: flex; flex-direction: column; gap: 2px; }
-.plus-unlock__copy b { font-size: var(--fs-14); font-weight: 650; color: var(--ink); }
-.plus-unlock__copy span { font-size: var(--fs-13); color: var(--ink-3); line-height: 1.4; }
-
-/* Price block — grouped tightly (Proximity) */
-.plus-price-block {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
-  padding: var(--s4) var(--s5);
-  background: var(--surface-2); border-radius: var(--r-md);
-  border: 1px solid var(--line);
-}
-.plus-price-block__amount {
-  font-size: var(--fs-30); font-weight: 700; letter-spacing: -0.04em; line-height: 1;
-  color: var(--ink); font-family: var(--font-numbers);
-}
-.plus-price-block__note {
-  font-size: var(--fs-13); color: var(--ink-3); line-height: 1.4;
-}
-
-/* CTA section */
-.plus-cta { display: flex; flex-direction: column; gap: var(--s2); }
-
-/* Already-Plus settled state */
-.plus-settled {
-  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3);
-  padding: var(--s5) 0;
-}
-.plus-settled__icon { color: var(--credit); }
-.plus-settled h2 { font-size: var(--fs-24); font-weight: 650; letter-spacing: -0.03em; }
-.plus-settled p { font-size: var(--fs-15); color: var(--ink-2); line-height: 1.6; max-width: 34ch; }
-
-/* Post-purchase welcome sheet */
-.plus-welcome {
-  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3);
-  padding: var(--s3) 0;
-}
-.plus-welcome__icon { color: var(--credit); }
-.plus-welcome p { font-size: var(--fs-15); color: var(--ink-2); line-height: 1.6; }
-
-
 /* ============================== SHARE CARD =============================== */
 
 .sharecard {
@@ -1266,18 +1194,8 @@ button.alert-row__content:hover { background: var(--surface-2); }
 @keyframes tabpop { 0% { scale: 1; } 40% { scale: 1.2; rotate: -7deg; } 100% { scale: 1; } }
 .tab.is-active .tab__ico svg { animation: tabpop 0.38s var(--ease-out); }
 
-/* plus foil shimmer */
-.plus-hero { position: relative; overflow: hidden; }
-.plus-hero::after {
-  content: ''; position: absolute; inset: -40% -60%;
-  background: linear-gradient(100deg, transparent 42%, rgb(255 255 255 / 0.35) 50%, transparent 58%);
-  display: none;
-  pointer-events: none;
-}
-@keyframes foil { 0% { translate: -80% 0; } 55%, 100% { translate: 80% 0; } }
-
 @media (prefers-reduced-motion: reduce) {
-  .netcard__stamp, .tab.is-active .tab__ico svg, .plus-hero::after { animation: none; }
+  .netcard__stamp, .tab.is-active .tab__ico svg { animation: none; }
   .sheet { transition-duration: 0.01s; }
 }
 

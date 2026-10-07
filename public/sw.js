@@ -5,7 +5,7 @@
    - API writes: never intercepted; the app layer queues them instead.
 */
 
-const VERSION = 'v1.26.0';
+const VERSION = 'v1.27.0';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -23,6 +23,8 @@ const SHELL_ASSETS = [
   '/styles/motion.css',
   '/styles/mobile-entry.css',
   '/styles/product.css',
+  '/styles/plus.css',
+  '/js/ui/product-art.js',
   '/js/entry.js',
   '/js/main.js',
   '/js/core/api.js',

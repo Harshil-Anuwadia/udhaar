@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
+import { productContrast } from './product-contrast.mjs';
 
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'udhaar-product-'));
 process.env.DATA_DIR = directory;
@@ -100,6 +101,10 @@ try {
     assert.equal(result.mainScroll, 0, 'the outer app must not scroll');
     assert.ok(result.scrolled > 0 && result.height >= 140, `content pane must scroll and have usable height: ${JSON.stringify(result)}`);
     await page.locator(scroller).evaluate(pane => pane.scrollTop = 0);
+  };
+  const readable = async () => {
+    await page.waitForFunction(() => !document.documentElement.classList.contains('theme-anim'));
+    assert.deepEqual(await page.evaluate(productContrast), [], 'visible text and functional icons retain accessible contrast');
   };
   const textContrast = async (selector, backgroundSelector) => {
     const ratio = await page.evaluate(({ selector, backgroundSelector }) => {
@@ -298,12 +303,16 @@ try {
       await page.locator('[data-product-ready]').waitFor();
       await page.evaluate(async () => (await import('/js/core/store.js')).applyTheme('light'));
       await viewportFits({ content: route.includes('/settle/') });
+      await readable();
       if (route.includes('/entry/')) { await textContrast('.entry-folio__note', '.entry-folio'); await textContrast('.entry-facts dd', '#app'); }
       if (route === '/review') await controlsStayPut('.review-journal', ['#hdr', '.review-search-tools', '#tabbar']);
       if (route.endsWith('/story') && height <= 640) await controlsStayPut('.story-timeline', ['#hdr', '.story-tools', '[data-add-moment]', '#tabbar']);
       await screenshot(`viewport-${width}x${height}-${route.split('/').at(-2) === 'settle' ? 'payment' : route === '/review' ? 'review' : route.endsWith('/story') ? 'story' : 'entry'}`);
       await page.evaluate(async () => (await import('/js/core/store.js')).applyTheme('dark'));
       await viewportFits();
+      await readable();
+      await page.evaluate(async () => (await import('/js/core/store.js')).applyTheme('sage'));
+      await readable();
       if (route.includes('/entry/')) { await textContrast('.entry-folio__note', '.entry-folio'); await textContrast('.entry-facts dd', '#app'); }
     }
   }
@@ -354,13 +363,24 @@ try {
   await page.setViewportSize({ width: 320, height: 568 });
   await viewportFits({ content: true });
   // Plus shares the detail frame: one purchase action, with its cost always visible.
-  for (const [width, height] of [[320, 568], [390, 844]]) {
+  for (const [width, height] of [[320, 568], [360, 640], [375, 701], [390, 844], [430, 932]]) {
     await page.setViewportSize({ width, height });
     await page.goto(base + '/#/plus');
     await page.locator('.plus-page').waitFor();
     await page.evaluate(async () => (await import('/js/core/store.js')).applyTheme('light'));
     await viewportFits({ content: true });
+    for (const theme of ['dark', 'sage', 'light']) {
+      await page.evaluate(async theme => (await import('/js/core/store.js')).applyTheme(theme), theme);
+      await readable();
+    }
     assert.equal(await page.locator('.plus-unlock').count(), 3);
+    assert.equal(await page.locator('.plus-hero').evaluate(hero => {
+      const bounds = hero.getBoundingClientRect();
+      return [...hero.querySelectorAll('.plus-art > g')].every(part => {
+        const box = part.getBoundingClientRect();
+        return box.top >= bounds.top && box.bottom <= bounds.bottom && box.left >= bounds.left && box.right <= bounds.right;
+      });
+    }), true, 'the Plus illustration stays complete at compact/tall layout boundaries');
     assert.equal(await page.locator('.product-foot [data-act]').count(), 1, 'Plus has one purchase action');
     assert.equal(await page.locator('#tabbar').isVisible(), false, 'Plus is a focused flow with a clear Back action');
     assert.equal(await page.locator('.plus-price-block').evaluate(price => {
@@ -371,6 +391,21 @@ try {
     await page.waitForFunction(() => !document.querySelector('.toast'));
     await screenshot(`plus-${width}x${height}`);
   }
+  // Illustration motion finishes once and never shifts the purchase action.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.reload();
+  await page.locator('.plus-art__book').waitFor();
+  const actionBefore = await page.locator('.plus-cta').boundingBox();
+  const arrivals = await page.locator('.plus-art').evaluate(async art => {
+    const animations = art.getAnimations({ subtree: true });
+    const timings = animations.map(animation => animation.effect.getTiming());
+    await Promise.all(animations.map(animation => animation.finished));
+    return timings;
+  });
+  assert.ok(arrivals.length > 0 && arrivals.every(timing => timing.iterations === 1 && timing.duration <= 1000), 'Plus artwork has one brief arrival, never a looping distraction');
+  assert.deepEqual(await page.locator('.plus-cta').boundingBox(), actionBefore, 'artwork cannot move the purchase action');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  assert.equal(await page.locator('.plus-art__book').evaluate(book => getComputedStyle(book).animationName), 'none', 'reduced motion skips the artwork arrival');
   await db.prepare("UPDATE users SET plan = 'plus' WHERE id = ?").run(signup.user.id);
   await page.reload();
   await page.locator('.plus-settled').waitFor();
