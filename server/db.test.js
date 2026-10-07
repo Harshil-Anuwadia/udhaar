@@ -79,3 +79,80 @@ test('legacy media gains an owner without changing its URL or bytes', async () =
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+test('legacy duplicate links consolidate money without deleting private pages or group shares', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'udhaar-link-migration-'));
+  const url = `file:${path.join(directory, 'legacy.db')}`;
+  let old = createDatabase({ url });
+  try {
+    await old.ready;
+    for (const id of ['alice', 'bob']) await old.prepare('INSERT INTO users (id,handle,name,password_hash,created_at,last_seen_at) VALUES (?,?,?,?,?,?)')
+      .run(id, id, id, 'hash', 1, 1);
+    await old.exec('DROP INDEX idx_friendships_linked_pair');
+    for (const [id, handle, created] of [['primary', 'bob', 1], ['alias', 'anotherbob', 2]]) {
+      await old.prepare('INSERT INTO friendships (id,owner_id,user_id,handle,name,note,created_at) VALUES (?,?,?,?,?,?,?)')
+        .run(id, 'alice', 'bob', handle, handle, `Private note for ${id}`, created);
+    }
+    await old.prepare('INSERT INTO groups (id,owner_id,name,created_at) VALUES (?,?,?,?)').run('trip', 'alice', 'Trip', 1);
+    await old.prepare('INSERT INTO splits (id,group_id,owner_id,title,amount,created_at,payer_friendship_id) VALUES (?,?,?,?,?,?,?)')
+      .run('bill', 'trip', 'alice', 'Bill', 100, 1, 'alias');
+    for (const [fid, amount] of [['primary', 40], ['alias', 60]]) {
+      await old.prepare('INSERT INTO split_shares (split_id,friendship_id,amount) VALUES (?,?,?)').run('bill', fid, amount);
+      await old.prepare('INSERT INTO group_members (group_id,friendship_id,joined_at) VALUES (?,?,?)').run('trip', fid, 1);
+      await old.prepare('INSERT INTO entries (id,friendship_id,owner_id,kind,direction,amount,split_id,group_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+        .run(`entry_${fid}`, fid, 'alice', 'money', 'owed_to_me', amount, 'bill', 'trip', 1);
+    }
+    await old.prepare('INSERT INTO moments (id,owner_id,friendship_id,title,occurred_on,created_at) VALUES (?,?,?,?,?,?)')
+      .run('memory', 'alice', 'alias', 'Private moment', '2026-01-01', 1);
+    await old.close();
+    old = null;
+    for (let pass = 0; pass < 2; pass++) {
+      const upgraded = createDatabase({ url });
+      try {
+        await upgraded.ready;
+        const rows = await upgraded.prepare('SELECT id, user_id, note FROM friendships ORDER BY id').all();
+        assert.deepEqual(rows, [{ id: 'alias', user_id: null, note: 'Private note for alias' }, { id: 'primary', user_id: 'bob', note: 'Private note for primary' }]);
+        assert.deepEqual(await upgraded.prepare('SELECT friendship_id, amount FROM entries ORDER BY amount').all(), [{ friendship_id: 'primary', amount: 40 }, { friendship_id: 'primary', amount: 60 }]);
+        assert.deepEqual(await upgraded.prepare('SELECT friendship_id, amount FROM split_shares').all(), [{ friendship_id: 'primary', amount: 100 }]);
+        assert.equal((await upgraded.prepare('SELECT payer_friendship_id FROM splits WHERE id = ?').get('bill')).payer_friendship_id, 'primary');
+        assert.equal((await upgraded.prepare('SELECT COUNT(*) AS n FROM group_members').get()).n, 1);
+        assert.equal((await upgraded.prepare('SELECT friendship_id FROM moments WHERE id = ?').get('memory')).friendship_id, 'alias');
+        await assert.rejects(upgraded.prepare('UPDATE friendships SET user_id = ? WHERE id = ?').run('bob', 'alias'), /UNIQUE/);
+      } finally { await upgraded.close(); }
+    }
+  } finally { await old?.close(); await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test('legacy refresh tokens gain distinct device lineages without changing existing credentials', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'udhaar-session-migration-'));
+  const url = `file:${path.join(directory, 'legacy.db')}`;
+  const legacy = createClient({ url });
+  try {
+    await legacy.execute('CREATE TABLE refresh_tokens (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token_hash TEXT UNIQUE, created_at INTEGER, expires_at INTEGER, revoked_at INTEGER)');
+    for (const id of ['phone_one', 'phone_two']) await legacy.execute({ sql: 'INSERT INTO refresh_tokens (id,user_id,token_hash,created_at,expires_at) VALUES (?,?,?,?,?)', args: [id, 'user', `hash_${id}`, 1, 1000] });
+    await legacy.close();
+    const upgraded = createDatabase({ url });
+    try {
+      await upgraded.ready;
+      const tokens = await upgraded.prepare('SELECT id, session_id, token_hash FROM refresh_tokens ORDER BY id').all();
+      assert.deepEqual(tokens, [
+        { id: 'phone_one', session_id: 'phone_one', token_hash: 'hash_phone_one' },
+        { id: 'phone_two', session_id: 'phone_two', token_hash: 'hash_phone_two' },
+      ]);
+    } finally { await upgraded.close(); }
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test('database rejects negative debt writes and case-variant email duplicates', async () => {
+  const isolated = createDatabase({ url: 'file::memory:' });
+  try {
+    await isolated.ready;
+    await isolated.prepare('INSERT INTO users (id,name,email,password_hash,created_at,last_seen_at) VALUES (?,?,?,?,?,?)')
+      .run('first', 'First', 'Mixed@Example.test', 'hash', 1, 1);
+    await assert.rejects(isolated.prepare('INSERT INTO users (id,name,email,password_hash,created_at,last_seen_at) VALUES (?,?,?,?,?,?)')
+      .run('second', 'Second', 'mixed@example.test', 'hash', 1, 1), /email already registered/);
+    await isolated.prepare('INSERT INTO friendships (id,owner_id,handle,name,created_at) VALUES (?,?,?,?,?)').run('friend', 'first', 'friend', 'Friend', 1);
+    await assert.rejects(isolated.prepare('INSERT INTO entries (id,friendship_id,owner_id,kind,direction,amount,created_at) VALUES (?,?,?,?,?,?,?)')
+      .run('negative', 'friend', 'first', 'money', 'owed_to_me', -1, 1), /negative entry amount|CHECK/);
+  } finally { await isolated.close(); }
+});

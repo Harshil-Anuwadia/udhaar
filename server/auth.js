@@ -38,21 +38,34 @@ export function signAccess(user) {
   return jwt.sign({ sub: user.id, h: user.handle }, SECRET, { expiresIn: ACCESS_TTL });
 }
 
-export async function issueRefresh(userId) {
+export async function issueRefresh(userId, storage = db, sessionId = newId('rs')) {
   const raw = crypto.randomBytes(32).toString('base64url');
-  await db.prepare(
-    `INSERT INTO refresh_tokens (id, user_id, token_hash, created_at, expires_at) VALUES (?,?,?,?,?)`,
-  ).run(newId('rt'), userId, sha(raw), now(), now() + REFRESH_TTL_MS);
+  await storage.prepare(
+    `INSERT INTO refresh_tokens (id, user_id, token_hash, session_id, created_at, expires_at) VALUES (?,?,?,?,?,?)`,
+  ).run(newId('rt'), userId, sha(raw), sessionId, now(), now() + REFRESH_TTL_MS);
   return raw;
 }
 
 export async function rotateRefresh(raw) {
-  const row = await db
-    .prepare(`SELECT * FROM refresh_tokens WHERE token_hash = ? AND revoked_at IS NULL`)
-    .get(sha(raw));
-  if (!row || row.expires_at < now()) return null;
-  await db.prepare(`UPDATE refresh_tokens SET revoked_at = ? WHERE id = ?`).run(now(), row.id);
-  return { userId: row.user_id, next: await issueRefresh(row.user_id) };
+  if (typeof raw !== 'string' || !raw) return null;
+  return db.transaction(async (tx) => {
+    const t = now();
+    const row = await tx.prepare(`SELECT * FROM refresh_tokens WHERE token_hash = ? AND revoked_at IS NULL`).get(sha(raw));
+    if (!row || row.expires_at <= t) return null;
+    const consumed = await tx.prepare(`UPDATE refresh_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL AND expires_at > ?`).run(t, row.id, t);
+    if (consumed.changes !== 1) return null;
+    return { userId: row.user_id, next: await issueRefresh(row.user_id, tx, row.session_id) };
+  });
+}
+
+export async function revokeRefresh(raw) {
+  if (typeof raw !== 'string' || !raw) return;
+  await db.transaction(async (tx) => {
+    // Even an already-rotated predecessor identifies this device's lineage.
+    // Serialize with rotation so an in-flight response cannot restore it.
+    const row = await tx.prepare('SELECT session_id FROM refresh_tokens WHERE token_hash = ?').get(sha(raw));
+    if (row) await tx.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE session_id = ? AND revoked_at IS NULL').run(now(), row.session_id);
+  });
 }
 
 export async function revokeAll(userId) {

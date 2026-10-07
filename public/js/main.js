@@ -22,6 +22,10 @@ const routes = {
   '/': lazyView('./views/home.js', 'viewHome'),
   '/add': lazyView('./views/add.js', 'viewAdd'),
   '/friend/:id': lazyView('./views/friend.js', 'viewFriend'),
+  '/review': lazyView('./views/journal.js', 'viewReview'),
+  '/friend/:id/entry/:entryId': lazyView('./views/journal.js', 'viewEntry'),
+  '/friend/:id/settle/:entryId': lazyView('./views/journal.js', 'viewPayment'),
+  '/friend/:id/story': lazyView('./views/journal.js', 'viewStory'),
   '/groups': lazyView('./views/groups.js', 'viewGroups'),
   '/group/:id': lazyView('./views/groups.js', 'viewGroup'),
   '/activity': lazyView('./views/activity.js', 'viewActivity'),
@@ -123,7 +127,10 @@ async function boot() {
 
   // Global refresh + data-changed wiring
   bus.on('data-changed', () => { saveCache(); softRefresh(); });
-  bus.on('refresh', () => softRefresh());
+  bus.on('refresh', () => {
+    softRefresh();
+    if (document.querySelector('.product-screen') && !currentPath().includes('/settle/')) render({ preserveScroll: true });
+  });
   bus.on('signed-out', () => { clearSession(); clearCache(); setState({ user: null, friends: [], groups: [], stats: null }); navigate('/auth'); });
   bus.on('user', (u) => { if (u) { setState({ user: u }); setCurrency(u.currency); saveCache(); } });
   bus.on('queue', (n) => setState({ queue: n }));
@@ -160,6 +167,7 @@ async function pollUnread() {
       syncChrome();
       if (unread > prev && document.visibilityState === 'visible' &&
           !['/auth', '/join', '/onboard', '/add'].includes(currentPath()) &&
+          !document.querySelector('.product-screen') &&
           !document.querySelector('.sheet.is-open')) {
         await render({ preserveScroll: true });
       }

@@ -13,6 +13,8 @@ The product voice, category, privacy rules, and future experience system live in
 [`BRAND_WORLD.md`](BRAND_WORLD.md).
 The staged long-term product architecture lives in
 [`PRODUCT_SYSTEM.md`](PRODUCT_SYSTEM.md).
+The new mobile screens, design decisions, and browser checks are documented in
+[`DESIGN.md`](DESIGN.md).
 
 ---
 
@@ -113,9 +115,8 @@ Three things can pin an old build to your browser. In order of likelihood:
    Kill it (`lsof -i :4173`, or close that terminal) and start again.
 2. **A stale service worker + disk cache from a previous build.** Once per
    machine after an upgrade: DevTools → Application → Storage →
-   **“Clear site data”** for the app's origin, then reload. (This unregisters
-   the old worker and drops its cached shell. Your ledger lives on the
-   server, nothing is lost.)
+   clear the service worker and static caches, then reload. Preserve localStorage
+   while entries are pending: it holds financial writes awaiting confirmation.
 3. Nothing else, as of `v1.3.0`: code/shell/fonts are now served
    `Cache-Control: no-cache` (ETag-revalidated), so unversioned URLs can
    never be frozen again; the worker self-activates (`skipWaiting` +
@@ -124,10 +125,15 @@ Three things can pin an old build to your browser. In order of likelihood:
 
 ## Money honesty
 
-Plus is ₹99/month-equivalent freemium (server-enforced limits: 8 people,
-120 lines, no photos on free). The checkout in this build is a disclosed
-demo — it flips the plan flag without charging anything; production would
-wire Razorpay/Stripe here.
+Plus is lifetime access: ₹49 for INR ledgers, or 1 unit in the other supported
+currencies. Free limits are enforced by the server (8 people, 120 open entries,
+2 groups). Razorpay checkout must be configured with RAZORPAY_KEY_ID and
+RAZORPAY_KEY_SECRET. Only a captured payment for an account-owned order can
+activate Plus; profile updates cannot change the plan.
+
+Run `npm test` for backend/database/client regressions and `npm run test:bugs:browser`
+for mobile browser checks. The latter uses `CHROMIUM_PATH` (default `/usr/bin/chromium`).
+See [BUGFIXES.md](BUGFIXES.md) for the fixes, migrations, and validation scope.
 
 ---
 

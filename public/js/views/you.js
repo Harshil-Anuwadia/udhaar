@@ -2,7 +2,7 @@
 
 import { h, esc, buzz, money, symbol, withSymbol, setCurrency, avatarHTML, plural, copyText, shortMoney, relTime, formatDate, fileToDataUrl } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
-import { api, clearSession, flushQueue } from '../core/api.js';
+import { api, clearSession, clearPendingForAccount, flushQueue } from '../core/api.js';
 import { state, setState, bus, savePrefs, loadPrefs, applyTheme, clearCache } from '../core/store.js';
 import { mount, setHeader, showFab } from './view.js';
 import { navigate } from '../core/router.js';
@@ -87,6 +87,7 @@ function youHTML(u, stats, card, invites) {
       <div class="stat"><b class="num due-text">${shortMoney(t.youOwe, cur)}</b><span>You owe</span></div>
     </div>
     ${t.disputedEntries ? `<p class="tiny muted" style="margin-top:var(--s3)">${plural(t.disputedEntries, 'questioned line')} still in the book.</p>` : ''}
+    <button class="book-review-link" type="button" data-act="review"><span>${Icon.ledger}</span><span><strong>Review your ledger</strong><small>Find a line. Look back. Get the full picture.</small></span>${Icon.chevR}</button>
   </section>
 
   <section class="anim-rise" style="animation-delay:70ms">
@@ -179,6 +180,7 @@ function bindYou(main, stats, card, invites) {
       case 'card': return openCardSheet(card);
       case 'invite': return openInvite(state.friends?.length ? state.friends : (await api.friends()).friends);
       case 'plus': return navigate('/plus');
+      case 'review': return navigate('/review');
       case 'nudges': {
         const prefs = loadPrefs();
         const next = prefs.nudges === false;
@@ -278,7 +280,7 @@ function currencySheet() {
         if (code === current) return;
         try {
           const quote = await api.currencyQuote(code);
-          if (quote.linkedLines) return toastError('Linked money lines cannot be converted safely yet. Their other owner would see the wrong currency.');
+          if (quote.linkedLines || quote.linkedPairs) return toastError('Linked ledgers must keep the same currency. Remove the shared connection before converting.');
           const sample = Math.round(100 * quote.rate * 100) / 100;
           confirmSheet({
             title: `Convert to ${code}?`,
@@ -426,7 +428,7 @@ async function exportSheet() {
   const s = new Sheet({ title: 'Export', body });
   s.open();
   try {
-    const [{ friends }, { entries }] = await Promise.all([api.friends(), api.entries({ status: 'all', limit: 200 })]);
+    const [{ friends }, { entries }] = await Promise.all([api.friends(), api.exportEntries()]);
     const rows = [['date', 'person', 'type', 'direction', 'amount', 'note', 'status']];
     for (const e of entries) {
       rows.push([
@@ -488,7 +490,7 @@ function deleteSheet() {
   const body = h('div', { class: 'col', style: { gap: 'var(--s3)' } });
   body.innerHTML = `
     <p class="small" style="color:var(--due);font-weight:600">This erases your ledger permanently.</p>
-    <p class="small muted">Every person, every line, every settlement. If anyone joined through your links, their copy of their own ledger stays with them — you cannot delete someone else’s book.</p>
+    <p class="small muted">Every person, line, receipt photo, and private Moment in your account is erased. People linked to you keep the shared ledger history they could already see; you cannot delete someone else’s book.</p>
     <div class="field"><label class="field__label" for="del-confirm">Type DELETE to confirm</label>
       <input class="input" id="del-confirm" placeholder="DELETE" autocomplete="off" autocapitalize="characters"></div>
   `;
@@ -500,7 +502,8 @@ function deleteSheet() {
   go.onclick = async () => {
     go.disabled = true; go.innerHTML = '<span class="btn__spinner"></span> Erasing…';
     try {
-      await api.del('/api/me/account').catch(() => {});
+      await api.del('/api/me/account');
+      clearPendingForAccount();
       await api.logout();
       clearSession(); clearCache();
       setState({ user: null, friends: [], groups: [], stats: null });

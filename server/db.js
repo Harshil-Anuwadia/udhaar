@@ -26,12 +26,13 @@ CREATE TABLE IF NOT EXISTS entries (
   owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   kind TEXT NOT NULL CHECK (kind IN ('money','favor','gesture')),
   direction TEXT NOT NULL CHECK (direction IN ('owed_to_me','owed_by_me')),
-  amount INTEGER NOT NULL DEFAULT 0, note TEXT,
+  amount INTEGER NOT NULL DEFAULT 0 CHECK (amount >= 0), note TEXT,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','settled','disputed','void')),
   due_at INTEGER, group_id TEXT REFERENCES groups(id) ON DELETE SET NULL,
   split_id TEXT REFERENCES splits(id) ON DELETE CASCADE, created_at INTEGER NOT NULL,
   settled_at INTEGER, confirmed_at INTEGER, remind_count INTEGER NOT NULL DEFAULT 0,
-  last_remind_at INTEGER, pinned INTEGER NOT NULL DEFAULT 0, photo TEXT
+  last_remind_at INTEGER, pinned INTEGER NOT NULL DEFAULT 0, photo TEXT,
+  version INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_entries_friendship ON entries(friendship_id, status);
 CREATE INDEX IF NOT EXISTS idx_entries_owner ON entries(owner_id, created_at);
@@ -97,10 +98,28 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id, read, created_at);
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER
+  token_hash TEXT NOT NULL UNIQUE, session_id TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires ON refresh_tokens(expires_at);
+CREATE TABLE IF NOT EXISTS payment_orders (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  amount INTEGER NOT NULL CHECK (amount > 0), currency TEXT NOT NULL,
+  payment_id TEXT UNIQUE, paid_at INTEGER, created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS entry_mutations (
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  mutation_id TEXT NOT NULL, request_hash TEXT NOT NULL, response_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL, PRIMARY KEY (owner_id, mutation_id)
+);
+CREATE TABLE IF NOT EXISTS settlements (
+  id TEXT PRIMARY KEY, entry_id TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+  fragment_id TEXT REFERENCES entries(id) ON DELETE SET NULL,
+  before_amount REAL NOT NULL, before_status TEXT NOT NULL,
+  before_settled_at INTEGER, before_confirmed_at INTEGER,
+  entry_version INTEGER NOT NULL, created_at INTEGER NOT NULL, undone_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_settlements_entry ON settlements(entry_id, created_at);
 CREATE TABLE IF NOT EXISTS invite_codes (
   code TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   used_by TEXT REFERENCES users(id) ON DELETE SET NULL, created_at INTEGER NOT NULL, used_at INTEGER
@@ -118,7 +137,7 @@ function bindStatement(client, sql, waitForReady = async () => {}) {
     const result = await client.execute({ sql, args });
     const columns = result.columns || [];
     const rows = result.rows.map((row) => Object.fromEntries(columns.map((column, i) => [column, row[i]])));
-    return { rows, meta: result.rowsAffected ? { changes: result.rowsAffected } : result.lastInsertRowid ? { lastInsertRowid: result.lastInsertRowid } : {} };
+    return { rows, meta: { changes: result.rowsAffected || 0, lastInsertRowid: result.lastInsertRowid } };
   };
   return {
     async all(...args) { return (await execute(args)).rows; },
@@ -129,21 +148,28 @@ function bindStatement(client, sql, waitForReady = async () => {}) {
 
 function wrapClient(client) {
   let ready;
+  let transactions = Promise.resolve();
   const wrapped = {
     get ready() { return ready; },
     prepare(sql) { return bindStatement(client, sql, () => ready); },
     async exec(sql) { await ready; await client.executeMultiple(sql); },
-    async transaction(callback) {
-      await ready;
-      const tx = await client.transaction('write');
-      try {
-        const value = await callback({ prepare: (sql) => bindStatement(tx, sql), exec: (sql) => tx.executeMultiple(sql) });
-        await tx.commit();
-        return value;
-      } catch (error) {
-        await tx.rollback();
-        throw error;
-      }
+    transaction(callback) {
+      // Single-connection libSQL modes cannot overlap BEGINs. The
+      // database write transaction also serializes other server instances.
+      const result = transactions.then(async () => {
+        await ready;
+        const tx = await client.transaction('write');
+        try {
+          const value = await callback({ prepare: (sql) => bindStatement(tx, sql), exec: (sql) => tx.executeMultiple(sql) });
+          await tx.commit();
+          return value;
+        } catch (error) {
+          await tx.rollback();
+          throw error;
+        } finally { tx.close(); }
+      });
+      transactions = result.catch(() => {});
+      return result;
     },
     async close() { await client.close(); },
   };
@@ -179,6 +205,71 @@ function wrapClient(client) {
       await client.execute("UPDATE media SET owner_id = (SELECT owner_id FROM entries WHERE photo = '/api/media/' || media.id LIMIT 1) WHERE owner_id IS NULL AND EXISTS (SELECT 1 FROM entries WHERE photo = '/api/media/' || media.id)");
     }
     await client.execute('CREATE INDEX IF NOT EXISTS idx_media_owner ON media(owner_id)');
+    const refreshColumns = await client.execute('PRAGMA table_info(refresh_tokens)');
+    if (!refreshColumns.rows.some(row => row.name === 'session_id')) {
+      try { await client.execute('ALTER TABLE refresh_tokens ADD COLUMN session_id TEXT'); }
+      catch (error) { if (!String(error?.message || '').includes('duplicate column name')) throw error; }
+    }
+    await client.execute('UPDATE refresh_tokens SET session_id = id WHERE session_id IS NULL');
+    await client.execute('CREATE INDEX IF NOT EXISTS idx_refresh_tokens_session ON refresh_tokens(session_id)');
+    const entryColumns = await client.execute('PRAGMA table_info(entries)');
+    if (!entryColumns.rows.some((row) => row.name === 'version')) {
+      try { await client.execute('ALTER TABLE entries ADD COLUMN version INTEGER NOT NULL DEFAULT 0'); }
+      catch (error) { if (!String(error?.message || '').includes('duplicate column name')) throw error; }
+    }
+    // Also enforce nonnegative writes on databases created before the CHECK.
+    await client.executeMultiple(`
+      CREATE TRIGGER IF NOT EXISTS entries_nonnegative_insert BEFORE INSERT ON entries
+      WHEN NEW.amount < 0 BEGIN SELECT RAISE(ABORT, 'negative entry amount'); END;
+      CREATE TRIGGER IF NOT EXISTS entries_nonnegative_update BEFORE UPDATE OF amount ON entries
+      WHEN NEW.amount < 0 BEGIN SELECT RAISE(ABORT, 'negative entry amount'); END;
+    `);
+    if (columns.rows.some((row) => row.name === 'email')) {
+      // Legacy case-colliding contacts stay recoverable by handle. Never merge
+      // accounts or remove their contacts as part of schema initialization.
+      await client.executeMultiple(`
+        CREATE TRIGGER IF NOT EXISTS users_email_unique_insert BEFORE INSERT ON users
+        WHEN NEW.email IS NOT NULL AND EXISTS (SELECT 1 FROM users WHERE email = NEW.email COLLATE NOCASE)
+        BEGIN SELECT RAISE(ABORT, 'email already registered'); END;
+        CREATE TRIGGER IF NOT EXISTS users_email_unique_update BEFORE UPDATE OF email ON users
+        WHEN NEW.email IS NOT NULL AND EXISTS (SELECT 1 FROM users WHERE id <> NEW.id AND email = NEW.email COLLATE NOCASE)
+        BEGIN SELECT RAISE(ABORT, 'email already registered'); END;
+      `);
+    }
+    // Repair duplicate linked rows without deleting people, moments or notes.
+    // Their financial records move to one canonical shared page; aliases stay
+    // private, so a counterparty's incoming lines cannot be counted twice.
+    const repair = await client.transaction('write');
+    try {
+      const duplicates = await repair.execute(`SELECT owner_id, user_id FROM friendships
+        WHERE user_id IS NOT NULL GROUP BY owner_id, user_id HAVING COUNT(*) > 1`);
+      for (const pair of duplicates.rows) {
+        const rows = (await repair.execute({ sql: 'SELECT id FROM friendships WHERE owner_id = ? AND user_id = ? ORDER BY created_at, id', args: [pair.owner_id, pair.user_id] })).rows;
+        const keep = rows[0].id;
+        for (const row of rows.slice(1)) {
+          const args = [keep, row.id];
+          for (const sql of [
+            'UPDATE entries SET friendship_id = ? WHERE friendship_id = ?',
+            'UPDATE links SET friendship_id = ? WHERE friendship_id = ?',
+            'UPDATE events SET friendship_id = ? WHERE friendship_id = ?',
+            'UPDATE splits SET payer_friendship_id = ? WHERE payer_friendship_id = ?',
+            `INSERT OR IGNORE INTO group_members (group_id, friendship_id, weight, joined_at)
+             SELECT group_id, ?, weight, joined_at FROM group_members WHERE friendship_id = ?`,
+            `INSERT INTO split_shares (split_id, friendship_id, amount)
+             SELECT split_id, ?, amount FROM split_shares WHERE friendship_id = ?
+             ON CONFLICT(split_id, friendship_id) DO UPDATE SET amount = amount + excluded.amount`,
+          ]) await repair.execute({ sql, args });
+          await repair.execute({ sql: 'DELETE FROM group_members WHERE friendship_id = ?', args: [row.id] });
+          await repair.execute({ sql: 'DELETE FROM split_shares WHERE friendship_id = ?', args: [row.id] });
+          await repair.execute({ sql: 'UPDATE friendships SET user_id = NULL WHERE id = ?', args: [row.id] });
+        }
+      }
+      await repair.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_friendships_linked_pair
+        ON friendships(owner_id, user_id) WHERE user_id IS NOT NULL`);
+      await repair.commit();
+    } catch (error) { await repair.rollback(); throw error; }
+    finally { repair.close(); }
+
     return wrapped;
   })();
   return wrapped;

@@ -150,8 +150,12 @@ r = await call('POST', '/api/friends', { name: 'Overflow' });
 ok('free cap enforced', r.status === 402, r.data);
 
 // 18. profile patch + currency
-r = await call('PATCH', '/api/me/profile', { currency: 'USD', theme: 'dark', plan: 'plus' });
-ok('profile patch + plan', r.data.user.currency === 'USD' && r.data.user.plan === 'plus', r.data.user);
+r = await call('PATCH', '/api/me/profile', { plan: 'plus' });
+ok('profile cannot grant paid Plus', r.status === 400, r.data);
+r = await call('PATCH', '/api/me/profile', { theme: 'dark' });
+ok('profile settings preserved', r.status === 200 && r.data.user.theme === 'dark' && r.data.user.plan === 'free', r.data);
+r = await call('PATCH', '/api/me/profile', { currency: 'USD' });
+ok('saved ledgers require currency conversion', r.status === 409, r.data);
 
 // 19. logout then refresh
 r = await call('POST', '/api/auth/logout');

@@ -137,7 +137,7 @@ function bind(main, events, incoming) {
     if (inc) {
       buzz(6);
       const entry = incoming.find((x) => x.id === inc.dataset.incoming);
-      if (entry?.friend?.id) return navigate(`/friend/${entry.friend.id}`);
+      if (entry?.friend?.id) return navigate(`/friend/${entry.friend.id}/entry/${entry.id}`);
       return toast('That person hasn’t been added to your side of the book yet.');
     }
   });

@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import Razorpay from 'razorpay';
+import { paymentGateway } from '../billing.js';
 import { Router } from 'express';
 import { db, newId, now } from '../db.js';
 import { saveDataUrl, unlinkUrl } from '../photos.js';
@@ -8,6 +8,8 @@ import { ProfileSchema, validate , PhotoSchema } from '../validate.js';
 import { computeHonor, totalsFor, friendsFor, insight, syncHonor } from '../ledger.js';
 import { publicUser } from './auth.js';
 import { inviteTokenFor } from './friends.js';
+import { retainSharedHistory } from '../ledger-retention.js';
+import { linkedMoneyCount, incompatibleLinks } from '../currency-boundary.js';
 import { convertAmount, distributeConverted, latestRate } from '../fx.js';
 
 const r = Router();
@@ -34,16 +36,27 @@ r.get('/stats', async (req, res) => {
 /* ------------------------------- profile -------------------------------- */
 
 r.patch('/profile', validate(ProfileSchema), async (req, res) => {
-  const { name, currency, theme, voiceMode, plan } = req.valid;
-  if (currency && currency !== req.user.currency) {
-    const [entries, groups] = await Promise.all([
-      db.prepare('SELECT COUNT(*) AS n FROM entries WHERE owner_id = ?').get(req.user.id),
-      db.prepare('SELECT COUNT(*) AS n FROM groups WHERE owner_id = ?').get(req.user.id),
-    ]);
-    if (req.user.onboarded || entries.n || groups.n) return res.status(409).json({ error: 'currency_conversion_required', message: 'Use the currency conversion flow to change your ledger currency.' });
+  if (Object.hasOwn(req.body || {}, 'plan')) return res.status(400).json({ error: 'server_managed_plan', message: 'Plans can only be activated after payment.' });
+  const { name, currency, theme, voiceMode } = req.valid;
+  try {
+    await db.transaction(async (tx) => {
+      const user = await tx.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+      if (currency && currency !== user.currency) {
+        const entries = await tx.prepare('SELECT COUNT(*) AS n FROM entries WHERE owner_id = ?').get(user.id);
+        const groups = await tx.prepare('SELECT COUNT(*) AS n FROM groups WHERE owner_id = ?').get(user.id);
+        if (user.onboarded || entries.n || groups.n || await linkedMoneyCount(tx, user.id) || await incompatibleLinks(tx, user.id, currency)) {
+          const error = new Error('Use the currency conversion flow to change your ledger currency. Linked ledgers must keep the same denomination.');
+          error.status = 409;
+          throw error;
+        }
+      }
+      await tx.prepare(`UPDATE users SET name = COALESCE(?,name), currency = COALESCE(?,currency), theme = COALESCE(?,theme), voice_mode = COALESCE(?,voice_mode) WHERE id = ?`)
+        .run(name ?? null, currency ?? null, theme ?? null, voiceMode ?? null, req.user.id);
+    });
+  } catch (error) {
+    if (error.status === 409) return res.status(409).json({ error: 'currency_conversion_required', message: error.message });
+    throw error;
   }
-  await db.prepare(`UPDATE users SET name = COALESCE(?,name), currency = COALESCE(?,currency), theme = COALESCE(?,theme), voice_mode = COALESCE(?,voice_mode), plan = COALESCE(?,plan) WHERE id = ?`)
-    .run(name ?? null, currency ?? null, theme ?? null, voiceMode ?? null, plan ?? null, req.user.id);
   const fresh = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.user.id);
   res.json({ user: await publicUser(fresh) });
 });
@@ -61,15 +74,14 @@ r.post('/create-order', rateLimit({ windowMs: 60_000, max: 10, key: 'order' }), 
   if (amountPaise < 100) return res.status(400).json({ error: 'invalid_amount', message: 'Amount too small' });
 
   try {
-    const razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
-    });
-    const order = await razorpay.orders.create({
+    const order = await paymentGateway.createOrder({
       amount: amountPaise,
       currency: cur,
       receipt: `rcpt_${req.user.id}_${Date.now()}`
     });
+    if (!order?.id || order.amount !== amountPaise || order.currency !== cur) throw new Error('Gateway returned an unexpected order.');
+    await db.prepare('INSERT INTO payment_orders (id, user_id, amount, currency, created_at) VALUES (?,?,?,?,?)')
+      .run(order.id, req.user.id, amountPaise, cur, now());
     res.json({
       order_id: order.id,
       amount: order.amount,
@@ -83,38 +95,78 @@ r.post('/create-order', rateLimit({ windowMs: 60_000, max: 10, key: 'order' }), 
 });
 
 r.post('/verify-payment', rateLimit({ windowMs: 60_000, max: 10, key: 'verify' }), async (req, res) => {
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-    return res.status(400).json({ error: 'missing_fields', message: 'Missing payment signature details' });
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    return res.status(503).json({ error: 'config_missing', message: 'Payment gateway is not configured.' });
   }
-  
-  const expectedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-    .update(razorpay_order_id + '|' + razorpay_payment_id)
-    .digest('hex');
-    
-  if (expectedSignature !== razorpay_signature) {
-    return res.status(400).json({ error: 'invalid_signature', message: 'Payment verification failed' });
+  const { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature } = req.body || {};
+  if (typeof orderId !== 'string' || !/^order_[a-zA-Z0-9]+$/.test(orderId) ||
+      typeof paymentId !== 'string' || !/^pay_[a-zA-Z0-9]+$/.test(paymentId) ||
+      typeof signature !== 'string' || !/^[a-fA-F0-9]{64}$/.test(signature)) {
+    return res.status(400).json({ error: 'missing_fields', message: 'Invalid payment signature details.' });
   }
-  
+  const expected = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update(`${orderId}|${paymentId}`).digest();
+  if (!crypto.timingSafeEqual(expected, Buffer.from(signature, 'hex'))) {
+    return res.status(400).json({ error: 'invalid_signature', message: 'Payment verification failed.' });
+  }
+  let order = await db.prepare('SELECT * FROM payment_orders WHERE id = ?').get(orderId);
+  if (!order) {
+    // Orders opened before this schema existed carry our server-generated
+    // purchaser receipt at Razorpay. Recover only that authenticated binding.
+    let legacy;
+    try { legacy = await paymentGateway.fetchOrder(orderId); }
+    catch { return res.status(503).json({ error: 'verification_unavailable', message: 'Order confirmation is unavailable. Retry with the same receipt.' }); }
+    const prefix = `rcpt_${req.user.id}_`;
+    if (legacy?.id !== orderId || typeof legacy.receipt !== 'string' || !legacy.receipt.startsWith(prefix) ||
+        !/^\d{13}$/.test(legacy.receipt.slice(prefix.length)) ||
+        !['INR', 'USD', 'GBP', 'EUR', 'AED', 'SGD', 'AUD', 'CAD'].includes(legacy.currency) ||
+        legacy.amount !== (legacy.currency === 'INR' ? 4900 : 100)) {
+      return res.status(404).json({ error: 'unknown_order', message: 'This payment order does not belong to your account.' });
+    }
+    order = await db.transaction(async (tx) => {
+      await tx.prepare('INSERT OR IGNORE INTO payment_orders (id, user_id, amount, currency, created_at) VALUES (?,?,?,?,?)')
+        .run(orderId, req.user.id, legacy.amount, legacy.currency, now());
+      return tx.prepare('SELECT * FROM payment_orders WHERE id = ?').get(orderId);
+    });
+  }
+  if (order.user_id !== req.user.id) return res.status(404).json({ error: 'unknown_order', message: 'This payment order does not belong to your account.' });
+  if (order.payment_id && order.payment_id !== paymentId) return res.status(409).json({ error: 'order_used', message: 'This order was already paid.' });
   try {
-    await db.prepare(`UPDATE users SET plan = 'plus' WHERE id = ?`).run(req.user.id);
-    const fresh = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.user.id);
+    if (!order.paid_at) {
+      const payment = await paymentGateway.fetchPayment(paymentId);
+      if (payment.id !== paymentId || payment.order_id !== order.id || payment.amount !== order.amount ||
+          payment.currency !== order.currency || payment.status !== 'captured' || payment.captured !== true) {
+        return res.status(409).json({ error: 'payment_not_captured', message: 'Payment is not yet confirmed for this order. Retry once it is captured.' });
+      }
+    }
+    await db.transaction(async (tx) => {
+      const current = await tx.prepare('SELECT * FROM payment_orders WHERE id = ? AND user_id = ?').get(orderId, req.user.id);
+      if (!current || (current.payment_id && current.payment_id !== paymentId)) {
+        const error = new Error('This order was already used.'); error.status = 409; throw error;
+      }
+      await tx.prepare('UPDATE payment_orders SET payment_id = ?, paid_at = COALESCE(paid_at, ?) WHERE id = ?')
+        .run(paymentId, now(), current.id);
+      await tx.prepare("UPDATE users SET plan = 'plus' WHERE id = ?").run(current.user_id);
+    });
+    const fresh = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     res.json({ success: true, user: await publicUser(fresh) });
-  } catch (err) {
-    res.status(500).json({ error: 'db_error', message: 'Payment verified but failed to update plan.' });
+  } catch (error) {
+    if (error.status === 409 || /UNIQUE constraint/.test(String(error.message))) {
+      return res.status(409).json({ error: 'payment_used', message: 'This payment has already been used.' });
+    }
+    res.status(503).json({ error: 'verification_unavailable', message: 'Payment confirmation is unavailable. Retry with the same receipt.' });
   }
 });
 
 r.get('/currency/quote', async (req, res) => {
   try {
     const quote = await latestRate(req.user.currency, String(req.query.to || ''));
-    const [lines, groups, linked] = await Promise.all([
+    const [lines, groups, linked, linkedPairs] = await Promise.all([
       db.prepare("SELECT COUNT(*) AS n FROM entries WHERE owner_id = ? AND kind = 'money'").get(req.user.id),
       db.prepare('SELECT COUNT(*) AS n FROM groups WHERE owner_id = ?').get(req.user.id),
-      db.prepare("SELECT COUNT(*) AS n FROM entries e JOIN friendships f ON f.id = e.friendship_id WHERE e.owner_id = ? AND e.kind = 'money' AND f.user_id IS NOT NULL").get(req.user.id),
+      linkedMoneyCount(db, req.user.id).then(n => ({ n })),
+      incompatibleLinks(db, req.user.id, quote.to),
     ]);
-    res.json({ ...quote, lines: lines.n, groups: groups.n, linkedLines: linked.n });
+    res.json({ ...quote, lines: lines.n, groups: groups.n, linkedLines: linked.n, linkedPairs });
   } catch (error) { res.status(503).json({ error: 'rate_unavailable', message: error.message }); }
 });
 
@@ -130,8 +182,8 @@ r.post('/currency/change', rateLimit({ windowMs: 3600_000, max: 12, key: 'curren
     await db.transaction(async (tx) => {
       const user = await tx.prepare('SELECT currency FROM users WHERE id = ?').get(req.user.id);
       if (user?.currency !== quote.from) throw new Error('Currency changed elsewhere. Refresh and try again.');
-      const linked = await tx.prepare("SELECT COUNT(*) AS n FROM entries e JOIN friendships f ON f.id = e.friendship_id WHERE e.owner_id = ? AND e.kind = 'money' AND f.user_id IS NOT NULL").get(req.user.id);
-      if (linked.n) throw new Error('Linked people share your money lines. Currency conversion is paused for these ledgers so their balances cannot silently change.');
+      const linked = await linkedMoneyCount(tx, req.user.id);
+      if (linked || await incompatibleLinks(tx, req.user.id, to)) throw new Error('Linked people share your money lines. Currency conversion is paused for these ledgers so their balances cannot silently change.');
       const entries = await tx.prepare("SELECT id, amount FROM entries WHERE owner_id = ? AND kind = 'money'").all(req.user.id);
       const splits = await tx.prepare('SELECT id, amount, me_share, payer_kind FROM splits WHERE owner_id = ?').all(req.user.id);
       const updates = entries.map((entry) => [convertAmount(entry.amount, quote.rate), entry.id]);
@@ -141,14 +193,12 @@ r.post('/currency/change', rateLimit({ windowMs: 3600_000, max: 12, key: 'curren
         const values = distributeConverted([...shares.map((s) => s.amount), split.me_share], quote.rate);
         splitUpdates.push({ split, shares, values, total: convertAmount(split.amount, quote.rate) });
       }
-      for (const [amount, id] of updates) await tx.prepare('UPDATE entries SET amount = ? WHERE id = ?').run(amount, id);
+      for (const [amount, id] of updates) await tx.prepare('UPDATE entries SET amount = ?, version = version + 1 WHERE id = ?').run(amount, id);
       for (const { split, shares, values, total } of splitUpdates) {
         await tx.prepare('UPDATE splits SET amount = ?, me_share = ? WHERE id = ?').run(total, values.at(-1), split.id);
         for (let i = 0; i < shares.length; i++) {
           await tx.prepare('UPDATE split_shares SET amount = ? WHERE split_id = ? AND friendship_id = ?').run(values[i], split.id, shares[i].friendship_id);
-          if (split.payer_kind === 'me') await tx.prepare('UPDATE entries SET amount = ? WHERE split_id = ? AND friendship_id = ?').run(values[i], split.id, shares[i].friendship_id);
         }
-        if (split.payer_kind === 'friend') await tx.prepare('UPDATE entries SET amount = ? WHERE split_id = ?').run(values.at(-1), split.id);
       }
       await tx.prepare('UPDATE groups SET currency = ? WHERE owner_id = ?').run(to, req.user.id);
       await tx.prepare('UPDATE users SET currency = ? WHERE id = ?').run(to, req.user.id);
@@ -331,7 +381,9 @@ r.delete('/account', rateLimit({ windowMs: 3600_000, max: 3, key: 'delete' }), a
   const id = req.user.id;
   await db.transaction(async (tx) => {
     await tx.prepare(`DELETE FROM media WHERE owner_id = ?`).run(id);
-    // Unlink, don't destroy, other people's books.
+    const friendships = await tx.prepare('SELECT * FROM friendships WHERE owner_id = ? AND user_id IS NOT NULL').all(id);
+    for (const friendship of friendships) await retainSharedHistory(tx, friendship);
+    // Unlink, preserving the other participant's financial history.
     await tx.prepare(`UPDATE friendships SET user_id = NULL WHERE user_id = ?`).run(id);
     await tx.prepare(`DELETE FROM friendships WHERE owner_id = ?`).run(id);
     await tx.prepare(`DELETE FROM groups WHERE owner_id = ?`).run(id);
@@ -343,6 +395,7 @@ r.delete('/account', rateLimit({ windowMs: 3600_000, max: 3, key: 'delete' }), a
     await tx.prepare(`DELETE FROM users WHERE id = ?`).run(id);
   });
   res.clearCookie('at', { path: '/api/media' });
+  res.clearCookie('rt', { path: '/api/auth' });
   res.json({ ok: true });
 });
 

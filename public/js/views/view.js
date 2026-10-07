@@ -8,6 +8,8 @@ import { navigate, currentPath, navDir } from '../core/router.js';
 
 const mounters = new Map();
 let chromeBuilt = false;
+let headerBackTo = null;
+let headerBackAction = null;
 
 let activeScreenPath = null;
 export function resetActiveScreen() { activeScreenPath = null; }
@@ -113,8 +115,9 @@ export function buildChrome() {
   // Detail headers always return to their own section, even after a deep link.
   $('#hdrBack').addEventListener('click', () => {
     buzz(6);
+    if (headerBackAction) return headerBackAction();
     const path = currentPath();
-    navigate(path.startsWith('/group/') ? '/groups' : path === '/plus' ? '/you' : '/');
+    navigate(headerBackTo || (path.startsWith('/group/') ? '/groups' : path === '/plus' ? '/you' : '/'));
   });
 
   // Pull to refresh (touch only)
@@ -133,7 +136,7 @@ function tab(id, to, label, iconName) {
     </a>`;
 }
 
-const TAB_MAP = { '/': 'home', '/friend': 'home', '/groups': 'groups', '/group': 'groups', '/activity': 'alerts', '/you': 'you', '/plus': 'you' };
+const TAB_MAP = { '/': 'home', '/review': 'home', '/friend': 'home', '/groups': 'groups', '/group': 'groups', '/activity': 'alerts', '/you': 'you', '/plus': 'you' };
 
 export function syncChrome() {
   const path = currentPath();
@@ -170,7 +173,9 @@ export function hideChrome() {
 export function showFab(_show = true) {}
 export function showTabs(show = true) { $('#tabbar')?.classList.toggle('hide', !show); }
 
-export function setHeader({ title, sub, back = false, actions = [] }) {
+export function setHeader({ title, sub, back = false, backTo = null, onBack = null, actions = [] }) {
+  headerBackTo = backTo;
+  headerBackAction = onBack;
   const t = $('#hdrTitle');
   const s = $('#hdrSub');
   const b = $('#hdrBack');

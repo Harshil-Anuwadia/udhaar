@@ -5,7 +5,7 @@ import { Icon } from '../ui/icons.js';
 import { api } from '../core/api.js';
 import { state, bus } from '../core/store.js';
 import { mount, setHeader, showFab } from './view.js';
-import { navigate } from '../core/router.js';
+import { navigate, currentPath } from '../core/router.js';
 import { toast, toastOk, toastError } from '../ui/toast.js';
 import { Sheet, confirmSheet } from '../ui/sheet.js';
 import { confetti } from '../ui/confetti.js';
@@ -88,7 +88,7 @@ function friendHTML(f, entries, moments, history, inviteToken) {
     </div>
   </section>
 
-
+  <button class="person-story-link" type="button" data-act="story"><span>${Icon.ledger}</span><span><strong>Your story with ${esc(f.name)}</strong><small>${entries.length} ledger ${entries.length === 1 ? 'line' : 'lines'} · ${moments.length} private ${moments.length === 1 ? 'moment' : 'moments'}</small></span>${Icon.chevR}</button>
   ${disputed.length ? `
   <section class="anim-rise">
     <div class="section-head"><h2 style="color:var(--warn)">Disputed</h2></div>
@@ -146,7 +146,7 @@ function momentDate(day) {
   return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function photoGallery(photos, label) {
+export function photoGallery(photos, label) {
   if (!photos.length) return '';
   return `<div class="photo-gallery ${photos.length === 1 ? 'photo-gallery--single' : ''}" aria-label="${esc(label)} photos">
     ${photos.map((url, index) => `<button type="button" class="photo-gallery__item" data-photo-index="${index}" aria-label="Open photo ${index + 1} of ${photos.length}">
@@ -156,7 +156,7 @@ function photoGallery(photos, label) {
   </div>`;
 }
 
-function bindPhotoGallery(root, photos, label) {
+export function bindPhotoGallery(root, photos, label) {
   root.querySelectorAll('[data-photo-index]').forEach((button) => button.addEventListener('click', () => {
     openLightbox(photos[Number(button.dataset.photoIndex)], label);
   }));
@@ -206,7 +206,6 @@ function entryRow(e, cur, f, swipeable = false) {
 /* --------------------------------- bind ---------------------------------- */
 
 function bindFriend(main, f, entries, moments, history, inviteToken) {
-  const cur = currencyCode();
   const shareUrl = `${location.origin}/#/join?token=${inviteToken}`;
   const open = entries.filter((e) => e.status === 'open');
 
@@ -246,8 +245,7 @@ function bindFriend(main, f, entries, moments, history, inviteToken) {
     const actEl = ev.target.closest('[data-act]');
 
     if (entryEl) {
-      const e = entries.find((x) => x.id === entryEl.dataset.entry);
-      return openEntrySheet(e, f, cur, shareUrl);
+      return navigate(`/friend/${f.id}/entry/${entryEl.dataset.entry}`);
     }
     if (momentEl) {
       const moment = moments.find((item) => item.id === momentEl.dataset.moment);
@@ -259,6 +257,7 @@ function bindFriend(main, f, entries, moments, history, inviteToken) {
 
     if (act === 'log') return openRecord({ friendshipId: f.id });
     if (act === 'moment') return openMomentComposer(f);
+    if (act === 'story') return navigate(`/friend/${f.id}/story`);
     if (act === 'settle-all') return settleAll(open, f);
     if (act === 'pay') return settleAll(open.filter((e) => e.direction === 'owed_by_me'), f, 'paid');
     if (act === 'nudge') return nudgeAll(open.filter((e) => e.direction === 'owed_to_me'), f, shareUrl);
@@ -286,7 +285,7 @@ function todayLocal() {
   return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
 }
 
-function openMomentComposer(friend) {
+export function openMomentComposer(friend, { onSaved } = {}) {
   const today = todayLocal();
   const body = h('div', { class: 'moment-composer' });
   body.innerHTML = `
@@ -320,13 +319,14 @@ function openMomentComposer(friend) {
       sheet.close();
       toastOk('Moment kept. Only you can see it.');
       bus.emit('data-changed');
-      navigate(`/friend/${friend.id}`);
+      if (onSaved) onSaved();
+      else navigate(`/friend/${friend.id}`);
     } catch (error) { save.disabled = false; save.textContent = 'Keep this moment'; toastError(error.message); }
   });
   sheet.open();
 }
 
-function openMomentSheet(moment, friend) {
+export function openMomentSheet(moment, friend, { onDeleted } = {}) {
   const body = h('div', { class: 'moment-detail' });
   const photos = moment.photos?.length ? moment.photos : moment.photo ? [moment.photo] : [];
   body.innerHTML = `
@@ -345,7 +345,8 @@ function openMomentSheet(moment, friend) {
           await api.removeMoment(friend.id, moment.id);
           toastOk('Moment deleted.');
           bus.emit('data-changed');
-          navigate(`/friend/${friend.id}`);
+          if (onDeleted) onDeleted();
+          else navigate(`/friend/${friend.id}`);
         } catch (error) { toastError(error.message); }
       },
     });
@@ -353,83 +354,35 @@ function openMomentSheet(moment, friend) {
   sheet.open();
 }
 
-async function settleEntry(e, f, main) {
-  if (e.kind !== 'money') {
-    try {
-      await api.settle(e.id);
-      buzz([12, 40, 12]);
-      confetti({ count: 18 });
-      toastOk(`${KIND_WORD[e.kind]} marked as done.`);
-      bus.emit('data-changed');
-      return refresh(main, f.id);
-    } catch (err) { return toastError(err.message); }
-  }
-
-  const cur = currencyCode();
-  const body = h('div', { class: 'col', style: { gap: 'var(--s3)' } });
-  const photos = e.photos?.length ? e.photos : e.photo ? [e.photo] : [];
-  body.innerHTML = `
-    ${photoGallery(photos, `Receipt for ${e.note || 'this line'}`)}
-    <p class="small muted">Full amount is <b class="num" style="color:var(--ink)">${withSymbol(e.amount, cur)}</b>. Settled a different number? Change it.</p>
-    <input class="input num" id="settleAmt" type="text" inputmode="decimal" value="${e.amount}" style="font-size:var(--fs-24);text-align:center;font-family:var(--font-numbers)">
-    <div class="quickrow" style="justify-content:center">
-      <button class="quick" data-q="full" type="button">Full</button>
-      <button class="quick" data-q="half" type="button">Half</button>
-      <button class="quick" data-q="0" type="button">Wrote it off</button>
-    </div>
-  `;
-  const input = body.querySelector('#settleAmt');
-  body.querySelectorAll('[data-q]').forEach((b) => b.addEventListener('click', () => {
-    buzz(5);
-    input.value = b.dataset.q === 'full' ? e.amount : b.dataset.q === 'half' ? Math.round(e.amount * 50) / 100 : 0;
-  }));
-
-  const go = h('button', { class: 'btn btn--primary btn--lg btn--block', type: 'button', text: 'Mark settled' });
-  bindPhotoGallery(body, photos, e.note || 'Receipt');
-  const sheet = new Sheet({ title: 'Settle this line', sub: esc(e.note || KIND_WORD[e.kind]), body, footer: go });
-  sheet.open();
-
-  go.onclick = async () => {
-    const amt = Math.max(0, Math.min(Math.round((Number(input.value.replace(/[^\d.]/g, '')) || 0) * 100) / 100, e.amount));
-    go.disabled = true; go.innerHTML = '<span class="btn__spinner"></span>';
-    try {
-      const res = await api.settle(e.id, amt < e.amount ? amt : undefined);
-      buzz([12, 40, 16]);
-      confetti({ count: amt >= e.amount ? 30 : 16 });
-      sheet.close();
-      toastOk(amt >= e.amount ? 'Settled.' : `Part-settled ${withSymbol(amt, cur)} — ${withSymbol(e.amount - amt, cur)} still open.`, {
-        action: 'Undo',
-        onAction: async () => { try { await api.reopen(e.id); bus.emit('data-changed'); toast('Reopened.'); } catch {} },
-      });
-      bus.emit('data-changed');
-      refresh(main, f.id);
-    } catch (err) {
-      go.disabled = false; go.textContent = 'Mark settled';
-      toastError(err.message);
-    }
-  };
+function settleEntry(e, f, _main) {
+  navigate(`/friend/${f.id}/settle/${e.id}`);
 }
 
 async function settleAll(open, f, mode = 'settled') {
+  const originPath = currentPath();
   const relevant = mode === 'paid' ? open.filter((e) => e.direction === 'owed_by_me') : open.filter((e) => e.direction === 'owed_to_me');
   if (!relevant.length) return toast('Nothing open in that direction.');
   confirmSheet({
     title: mode === 'paid' ? `Paid ${esc(f.name)} back?` : `Settle everything with ${esc(f.name)}?`,
-    body: `${relevant.length} open ${plural(relevant.length, 'line')} will be marked settled at once. You can undo each one afterwards.`,
+    body: `${plural(relevant.length, 'open line')} will be marked settled at once. You can undo each one afterwards.`,
     confirmLabel: mode === 'paid' ? 'Yes, I paid them' : 'Mark all settled',
     onConfirm: async () => {
       let ok = 0;
       for (const e of relevant) { try { await api.settle(e.id); ok += 1; } catch {} }
-      buzz([14, 50, 20]);
-      confetti({ count: 40, originY: 0.35 });
-      toastOk(`${plural(ok, 'line')} closed. The details stay in the book.`);
+      if (ok === relevant.length) {
+        buzz([14, 50, 20]);
+        confetti({ count: 40, originY: 0.35 });
+        toastOk(`${plural(ok, 'line')} closed. The details stay in the book.`);
+      } else {
+        toastError(ok ? `${ok} of ${relevant.length} lines confirmed closed. Check the latest ledger for the rest.` : 'Couldn’t confirm these records. Check the latest ledger before trying again.');
+      }
       bus.emit('data-changed');
-      navigate('/');
+      if (currentPath() === originPath) navigate(`/friend/${f.id}`);
     },
   });
 }
 
-async function nudge(e, f, shareUrl) {
+export async function nudge(e, f, shareUrl) {
   try {
     const res = await api.remind(e.id);
     buzz([10, 30, 10]);
@@ -477,49 +430,6 @@ async function nudgeAll(open, f, shareUrl) {
     ],
   });
   sheet.open();
-}
-
-function openEntrySheet(e, f, cur, shareUrl) {
-  const isDue = e.direction === 'owed_to_me';
-  const body = h('div', { class: 'col', style: { gap: 'var(--s3)' } });
-  const photos = e.photos?.length ? e.photos : e.photo ? [e.photo] : [];
-  body.innerHTML = `
-    <div class="ledger-page" style="padding:var(--s5) var(--s5) var(--s5) calc(var(--s5) + 14px)">
-      <div class="netcard__label">${isDue ? `${esc(f.name)} owes you` : `You owe ${esc(f.name)}`}</div>
-      ${e.kind === 'money'
-        ? `<div class="netcard__amount" style="color:${isDue ? 'var(--credit)' : 'var(--due)'}"><span class="cur">${symbol(cur)}</span>${money(e.amount, cur)}</div>`
-        : `<div class="serif" style="font-size:var(--fs-24);padding:var(--s2) 0">${esc(e.note || KIND_WORD[e.kind])}</div>`}
-      ${e.note && e.kind === 'money' ? `<p class="small muted">“${esc(e.note)}”</p>` : ''}
-      <p class="tiny dim" style="margin-top:8px">${e.ownedByMe ? 'You logged this' : `${esc(f.name)} logged this`} · ${formatDate(e.createdAt)} · ${relTime(e.createdAt)}</p>
-      ${e.dueAt ? `<p class="tiny" style="color:${e.overdue ? 'var(--due)' : 'var(--ink-3)'};font-weight:600">${esc(dueLabel(e.dueAt))}</p>` : ''}
-    </div>
-    ${photoGallery(photos, e.note || 'Receipt')}
-  `;
-
-  bindPhotoGallery(body, photos, e.note || 'Receipt');
-
-  const actions = [];
-  if (e.status === 'open') {
-    actions.push(h('button', { class: `btn btn--block btn--lg ${isDue ? 'btn--primary' : 'btn--due'}`, type: 'button', text: isDue ? 'Mark as settled' : 'I paid this', onclick: async () => {
-      s.close();
-      settleEntry(e, f, document.querySelector('#main'));
-    } }));
-    if (isDue) actions.push(h('button', { class: 'btn btn--block btn--outline', type: 'button', html: `${Icon.nudge} Nudge ${esc(f.name)}`, onclick: () => { s.close(); nudge(e, f, shareUrl); } }));
-  } else if (e.status === 'settled') {
-    actions.push(h('button', { class: 'btn btn--block btn--outline', type: 'button', html: `${Icon.refresh} Reopen this line`, onclick: async () => {
-      try { await api.reopen(e.id); s.close(); bus.emit('data-changed'); toast('Reopened.'); } catch (err) { toastError(err.message); }
-    } }));
-  }
-  if (e.ownedByMe) actions.push(h('button', { class: 'btn btn--block btn--quiet', type: 'button', style: 'color:var(--due)', text: 'Delete', onclick: () => {
-    s.close();
-    confirmSheet({
-      title: 'Delete this line?', body: 'It leaves the book permanently.', confirmLabel: 'Tear it out', danger: true,
-      onConfirm: async () => { try { await api.removeEntry(e.id); toastOk('Deleted.'); bus.emit('data-changed'); } catch (err) { toastError(err.message); } },
-    });
-  } }));
-
-  const s = new Sheet({ title: e.status === 'settled' ? 'Settled line' : 'Open line', body, footer: actions });
-  s.open();
 }
 
 function openFriendMenu(f, inviteToken, reload) {
@@ -584,9 +494,4 @@ function editFriend(f, reload) {
       s.close(); toastOk('Details saved.'); bus.emit('data-changed'); reload();
     } catch (e) { go.disabled = false; toastError(e.message); }
   };
-}
-
-function refresh(main, friendId) {
-  const app = document.querySelector('#app');
-  if (app) navigate(`/friend/${friendId}`);
 }

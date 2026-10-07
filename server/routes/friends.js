@@ -4,6 +4,7 @@ import { requireAuth, rateLimit } from '../auth.js';
 import { FriendSchema, MomentSchema, validate } from '../validate.js';
 import { selectedPhotoInputs, savePhotoSet, attachPhotoSet, photoMapFor, photosForItem, unlinkUrls } from '../photos.js';
 import { decorate, friendsFor, makeShareToken, sharedEntriesFor, syncHonor } from '../ledger.js';
+import { retainSharedHistory } from '../ledger-retention.js';
 import { publicUser } from './auth.js';
 
 const r = Router();
@@ -101,6 +102,20 @@ export async function mirrorFriendship(inviterId, inviterFriendshipId, inviteeId
   if (row.owner_id !== inviterId || (row.user_id && row.user_id !== inviteeId)) {
     const error = new Error('This ledger is already linked to someone else.');
     error.code = 'already_linked';
+    throw error;
+  }
+
+  const invitee = await storage.prepare('SELECT currency FROM users WHERE id = ?').get(inviteeId);
+  if (!invitee || invitee.currency !== inviter.currency) {
+    const error = new Error('Both ledgers must use the same currency before linking.');
+    error.code = 'currency_mismatch';
+    throw error;
+  }
+  const duplicate = await storage.prepare('SELECT id FROM friendships WHERE owner_id = ? AND user_id = ? AND id <> ?')
+    .get(inviterId, inviteeId, inviterFriendshipId);
+  if (duplicate) {
+    const error = new Error('You already share a ledger with this person. Use the existing page.');
+    error.code = 'duplicate_pair';
     throw error;
   }
 
@@ -245,8 +260,9 @@ r.delete('/:id', async (req, res) => {
   const open = await db
     .prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS s FROM entries WHERE friendship_id = ? AND status='open'`)
     .get(f.id);
-  const otherOwnerId = f.user_id;
   await db.transaction(async (tx) => {
+    const current = await tx.prepare('SELECT * FROM friendships WHERE id = ? AND owner_id = ?').get(f.id, req.user.id);
+    if (current) await retainSharedHistory(tx, current);
     await tx.prepare(`DELETE FROM media WHERE owner_id = ? AND ('/api/media/' || id) IN (
       SELECT photo FROM entries WHERE friendship_id = ? AND photo IS NOT NULL
       UNION SELECT photo FROM moments WHERE friendship_id = ? AND photo IS NOT NULL
@@ -255,9 +271,9 @@ r.delete('/:id', async (req, res) => {
     )`).run(req.user.id, f.id, f.id, f.id, f.id);
     await tx.prepare(`DELETE FROM friendships WHERE id = ?`).run(f.id);
     // Unlink the other side's row but keep their data intact.
-    if (otherOwnerId) {
+    if (current?.user_id) {
       await tx.prepare(`UPDATE friendships SET user_id = NULL, note = COALESCE(note,?) WHERE owner_id = ? AND user_id = ?`)
-        .run('They removed their side of the ledger.', otherOwnerId, req.user.id);
+        .run('They removed their side of the ledger.', current.user_id, req.user.id);
     }
   });
   res.json({ ok: true, removedOpenEntries: open.n });
@@ -312,7 +328,7 @@ r.post('/link/:token/claim', async (req, res) => {
       return friend;
     });
   } catch (error) {
-    if (error.code === 'already_claimed' || error.code === 'already_linked' || error.code === 'invalid_friend') {
+    if (error.code === 'already_claimed' || error.code === 'already_linked' || error.code === 'invalid_friend' || error.code === 'currency_mismatch' || error.code === 'duplicate_pair') {
       return res.status(error.code === 'invalid_friend' ? 400 : 409).json({ error: error.code, message: error.message });
     }
     throw error;

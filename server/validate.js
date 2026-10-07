@@ -32,6 +32,7 @@ export const MomentSchema = z.object({
 });
 
 export const EntrySchema = z.object({
+  mutationId: z.string().regex(/^[a-zA-Z0-9_-]{8,100}$/).optional(),
   photo: z.string().max(4_000_000).optional(),
   photos: z.array(z.string().max(4_000_000)).max(4, 'Add up to four photos').optional(),
   friendshipId: z.string().min(3, 'Pick a person first'),
@@ -65,9 +66,7 @@ export const ProfileSchema = z.object({
   currency: z.enum(['INR', 'USD', 'GBP', 'EUR', 'AED', 'SGD', 'AUD', 'CAD']).optional(),
   theme: z.enum(['light', 'dark', 'sage']).optional(),
   voiceMode: z.enum(['neutral', 'male', 'female']).optional(),
-  // Plus is a free preview until billing exists. Do not interpret this client
-  // setting as proof of payment if a paid plan is introduced later.
-  plan: z.enum(['free', 'plus']).optional(),
+
 });
 
 export function validate(schema, source = 'body') {

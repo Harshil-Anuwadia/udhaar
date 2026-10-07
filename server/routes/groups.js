@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db, newId, now } from '../db.js';
+import { requireCompatibleMoney } from '../currency-boundary.js';
 import { requireAuth, rateLimit } from '../auth.js';
 import { GroupSchema, SplitSchema, validate } from '../validate.js';
 import { syncHonor } from '../ledger.js';
@@ -230,6 +231,8 @@ r.post('/splits', validate(SplitSchema), async (req, res) => {
   const created = [];
 
   await db.transaction(async (tx) => {
+    for (const fid of v.payer.kind === 'me' ? validShares.map(s => s.f.id) : [payerFriend.id]) await requireCompatibleMoney(tx, req.user.id, fid);
+
     await tx.prepare(
       `INSERT INTO splits (id, group_id, owner_id, payer_kind, payer_friendship_id, title, amount, method, created_at, note, me_share)
        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,

@@ -1,0 +1,272 @@
+/* Deeper mobile journeys, within the same square, forest-and-paper identity. */
+import { esc, money, withSymbol, symbol, currencyCode, avatarHTML, formatDate, buzz } from '../core/utils.js';
+import { api } from '../core/api.js';
+import { bus } from '../core/store.js';
+import { navigate, currentPath, currentQuery } from '../core/router.js';
+import { filterLedger, ledgerSummary, journalDays, localDay, paymentPreview } from '../core/ledger-review.js';
+import { Icon } from '../ui/icons.js';
+import { toastOk, toastError } from '../ui/toast.js';
+import { confirmSheet } from '../ui/sheet.js';
+import { mount, setHeader, showTabs } from './view.js';
+import { photoGallery, bindPhotoGallery, openMomentComposer, openMomentSheet, nudge as openReminder } from './friend.js';
+
+const KIND = { money: 'Money entry', favor: 'A favour', gesture: 'A promise' };
+const STATUS = { open: 'Open', settled: 'Settled', disputed: 'Questioned', void: 'Closed' };
+const routeFor = (friendId, entryId) => `/friend/${encodeURIComponent(friendId)}/entry/${encodeURIComponent(entryId)}`;
+const photosFor = item => item.photos?.length ? item.photos : item.photo ? [item.photo] : [];
+const dateLabel = at => formatDate(at, { day: 'numeric', month: 'short', year: 'numeric' });
+const dayLabel = at => localDay(at) === localDay(Date.now()) ? 'Today' : new Date(at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+const pill = entry => `<span class="record-status record-status--${esc(entry.status)}">${entry.overdue ? 'Overdue' : STATUS[entry.status] || 'Closed'}</span>`;
+const currentRoute = () => currentPath() + (Object.keys(currentQuery()).length ? `?${new URLSearchParams(currentQuery())}` : '');
+
+function productMount(ctx, html, bind, { tabs = true } = {}) {
+  const screen = mount(ctx.outlet, 'app', () => html, root => {
+    root.classList.add('product-screen');
+    bind?.(root);
+  });
+  if (!tabs) screen.setAttribute('data-nopull', '');
+  showTabs(tabs);
+  return screen;
+}
+
+function pageError(ctx, error, backTo) {
+  productMount(ctx, `<div class="product-empty"><span class="product-empty__icon">${Icon.wifiOff}</span><p class="eyebrow">Your book is still here</p><h1>${error.status === 404 ? 'This page has left the book.' : 'Couldn’t open this page.'}</h1><p>${esc(error.message || 'Check your connection and try again.')}</p><button class="btn btn--primary" data-retry>Try again</button><a class="product-text-link" href="#${esc(backTo)}">Back to your ledger ${Icon.chevR}</a></div>`, root => {
+    root.querySelector('[data-retry]').onclick = () => navigate(currentRoute());
+  });
+}
+
+async function loadPerson(ctx, title, backTo, tabs = true) {
+  setHeader({ title, back: true, backTo });
+  productMount(ctx, `<div class="skeleton" style="height:210px"></div><div class="skeleton" style="height:180px"></div>`, null, { tabs });
+  try {
+    const data = await api.friend(ctx.params.id);
+    return ctx.isCurrent?.() === false ? null : data;
+  } catch (error) {
+    if (ctx.isCurrent?.() !== false) pageError(ctx, error, `/friend/${ctx.params.id}`);
+    return null;
+  }
+}
+
+function entryBack(ctx) {
+  const from = ctx.query?.from;
+  if (typeof from === 'string' && (/^\/review(?:\?[^#]*)?$/.test(from) || from === `/friend/${ctx.params.id}/story`)) return from;
+  return `/friend/${ctx.params.id}`;
+}
+
+function journalRow(entry, { showPerson = true, from = '' } = {}) {
+  const friend = entry.friend;
+  return `<button type="button" class="journal-row" data-entry-route="${esc(routeFor(entry.friendshipId || friend?.id, entry.id) + (from ? `?from=${encodeURIComponent(from)}` : ''))}">
+    <span class="journal-row__icon" aria-hidden="true">${showPerson && friend ? avatarHTML({ name: friend.name, seed: friend.avatarSeed, size: 34 }) : Icon[entry.kind === 'money' ? 'receipt' : entry.kind === 'favor' ? 'hands' : 'heart']}</span>
+    <span class="journal-row__copy"><strong>${esc(entry.note || KIND[entry.kind])}</strong><span>${showPerson && friend ? `${esc(friend.name)} · ` : ''}${STATUS[entry.status] || 'Closed'}${entry.overdue ? ' · overdue' : ''}</span></span>
+    <span class="journal-row__amount ${entry.status === 'settled' || entry.status === 'void' ? 'is-settled' : entry.direction === 'owed_to_me' ? 'credit-text' : 'due-text'}"><b>${entry.kind === 'money' ? withSymbol(entry.amount) : entry.kind === 'favor' ? 'Favour' : 'Promise'}</b><small>${entry.status === 'settled' || entry.status === 'void' ? STATUS[entry.status].toLowerCase() : entry.direction === 'owed_to_me' ? 'owed to you' : 'you owe'}</small></span>
+    <span class="journal-row__chev" aria-hidden="true">${Icon.chevR}</span>
+  </button>`;
+}
+
+function bindEntryRoutes(root) {
+  root.querySelectorAll('[data-entry-route]').forEach(button => button.onclick = () => { buzz(6); navigate(button.dataset.entryRoute); });
+}
+
+export async function viewReview(ctx) {
+  setHeader({ title: 'Ledger review', sub: 'The details behind your balance', back: true, backTo: '/' });
+  productMount(ctx, '<div class="skeleton" style="height:200px"></div><div class="skeleton" style="height:280px"></div>');
+  let entries;
+  try { ({ entries } = await api.exportEntries()); }
+  catch (error) { if (ctx.isCurrent?.() !== false) pageError(ctx, error, '/'); return; }
+  if (ctx.isCurrent?.() === false) return;
+  const totals = ledgerSummary(entries);
+  const months = [...new Set(entries.map(entry => localDay(entry.createdAt).slice(0, 7)))].sort().reverse();
+  const query = ctx.query || {};
+  const filters = {
+    status: ['all', 'open', 'settled', 'disputed', 'overdue'].includes(query.status) ? query.status : 'all',
+    direction: ['owed_to_me', 'owed_by_me'].includes(query.direction) ? query.direction : 'all',
+    month: months.includes(query.month) ? query.month : 'all', search: query.search || '',
+  };
+  const root = productMount(ctx, `
+    <section class="review-intro" data-product-ready><p class="eyebrow">Across your people</p><h1>Your ledger, <span>in full.</span></h1><p class="product-lede">Every line, with all the details.</p></section>
+    <section class="review-balances" aria-label="All outstanding money"><div><span>Owed to you</span><strong class="credit-text">${withSymbol(totals.owedToYou)}</strong></div><div><span>You owe</span><strong class="due-text">${withSymbol(totals.youOwe)}</strong></div><p>${totals.open} open ${totals.open === 1 ? 'line' : 'lines'}${totals.questioned ? ` · ${totals.questioned} questioned` : ''}<span>All dates</span></p></section>
+    <section class="review-browser" aria-label="Find an entry">
+      <label class="ledger-search" for="ledger-search">${Icon.search}<input id="ledger-search" type="search" placeholder="Find a person or a note" value="${esc(filters.search)}" autocomplete="off" aria-label="Search your ledger"></label>
+      <details class="ledger-filter-details" ${filters.month !== 'all' || filters.direction !== 'all' ? 'open' : ''}><summary>${Icon.filter}<span data-filter-summary>All dates · Both sides</span>${Icon.chevD}</summary><div class="ledger-selects"><label>Date<select id="ledger-month"><option value="all">All dates</option>${months.map(month => `<option value="${month}">${new Date(`${month}-01T12:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</option>`).join('')}</select></label><label>Direction<select id="ledger-direction"><option value="all">Both sides</option><option value="owed_to_me">Owed to you</option><option value="owed_by_me">You owe</option></select></label></div></details>
+      <div class="product-segments" aria-label="Entry status">${[['all', 'All'], ['open', 'Open'], ['settled', 'Settled'], ['disputed', 'Questioned'], ['overdue', 'Overdue']].map(([value, label]) => `<button type="button" data-status="${value}" aria-pressed="${value === filters.status}">${label}</button>`).join('')}</div>
+      <div class="journal-result-count" role="status" aria-live="polite"></div><div class="review-journal"></div>
+    </section>`, null);
+  root.querySelector('#ledger-month').value = filters.month;
+  root.querySelector('#ledger-direction').value = filters.direction;
+  const update = () => {
+    const params = new URLSearchParams(Object.entries(filters).filter(([key, value]) => key === 'search' ? value.trim() : value !== 'all'));
+    const from = `/review${params.size ? `?${params}` : ''}`;
+    history.replaceState(null, '', `#${from}`);
+    const visible = filterLedger(entries, filters);
+    root.querySelector('[data-filter-summary]').textContent = `${root.querySelector('#ledger-month').selectedOptions[0].textContent} · ${root.querySelector('#ledger-direction').selectedOptions[0].textContent}`;
+    root.querySelector('.journal-result-count').textContent = `${visible.length} ${visible.length === 1 ? 'line' : 'lines'}${filters.month !== 'all' ? ' · by recorded date' : ' in the book'}`;
+    root.querySelectorAll('[data-status]').forEach(button => button.setAttribute('aria-pressed', button.dataset.status === filters.status));
+    root.querySelector('.review-journal').innerHTML = visible.length ? journalDays(visible).map(day => `<section class="journal-day"><h2>${esc(dayLabel(day.at))}</h2><div>${day.items.map(entry => journalRow(entry, { from })).join('')}</div></section>`).join('') : `<div class="journal-empty">${Icon.search}<h2>${entries.length ? 'No lines match.' : 'A clean first page.'}</h2><p>${entries.length ? 'Try another name, date, or status.' : 'Add your first entry to start the story.'}</p>${entries.length ? '<button class="product-text-link" type="button" data-reset>Clear filters</button>' : '<a class="btn btn--primary" href="#/add">Add an entry</a>'}</div>`;
+    bindEntryRoutes(root.querySelector('.review-journal'));
+    root.querySelector('[data-reset]')?.addEventListener('click', () => {
+      Object.assign(filters, { status: 'all', month: 'all', direction: 'all', search: '' });
+      root.querySelector('#ledger-search').value = '';
+      root.querySelector('#ledger-month').value = 'all';
+      root.querySelector('#ledger-direction').value = 'all';
+      update();
+    });
+  };
+  root.querySelector('#ledger-search').oninput = event => { filters.search = event.target.value; update(); };
+  root.querySelector('#ledger-month').onchange = event => { filters.month = event.target.value; update(); };
+  root.querySelector('#ledger-direction').onchange = event => { filters.direction = event.target.value; update(); };
+  root.querySelectorAll('[data-status]').forEach(button => button.onclick = () => { filters.status = button.dataset.status; buzz(5); update(); });
+  update();
+}
+
+export async function viewEntry(ctx) {
+  const backTo = entryBack(ctx);
+  const data = await loadPerson(ctx, 'Entry details', backTo);
+  if (!data) return;
+  const { friend, entries } = data;
+  const entry = entries.find(item => item.id === ctx.params.entryId);
+  if (!entry) { pageError(ctx, { status: 404, message: 'This entry may have been removed. The rest of your ledger is still available.' }, `/friend/${friend.id}`); return; }
+  const owed = entry.direction === 'owed_to_me';
+  const photos = photosFor(entry);
+  const root = productMount(ctx, `
+    <section class="entry-folio" data-product-ready><div class="entry-folio__top"><span class="eyebrow">${KIND[entry.kind]}</span>${pill(entry)}</div><p class="entry-folio__direction">${owed ? `${esc(friend.name)} ${['settled', 'void'].includes(entry.status) ? 'owed' : 'owes'} you` : `You ${['settled', 'void'].includes(entry.status) ? 'owed' : 'owe'} ${esc(friend.name)}`}</p><h1 class="entry-folio__amount ${owed ? 'credit-text' : 'due-text'}">${entry.kind === 'money' ? `<small>${esc(symbol())}</small>${money(entry.amount)}` : entry.kind === 'favor' ? 'A favour' : 'A promise'}</h1><p class="entry-folio__note">${esc(entry.note || 'No note added')}</p><div class="entry-folio__person">${avatarHTML({ name: friend.name, seed: friend.avatar_seed, size: 28, avatarUrl: friend.avatarUrl })}<span>With ${esc(friend.name)}</span><span>${friend.linked ? 'Shared ledger' : 'Your book'}</span></div></section>
+    <section class="entry-facts"><h2 class="eyebrow">The details</h2><dl><div><dt>Recorded</dt><dd>${esc(dateLabel(entry.createdAt))}</dd></div><div><dt>Logged by</dt><dd>${entry.ownedByMe ? 'You' : esc(friend.name)}</dd></div>${entry.dueAt ? `<div><dt>Due date</dt><dd>${esc(dateLabel(entry.dueAt))}${entry.overdue ? ' · overdue' : ''}</dd></div>` : ''}${entry.settledAt ? `<div><dt>Settled</dt><dd>${esc(dateLabel(entry.settledAt))}</dd></div>` : ''}${entry.lastRemindAt ? `<div><dt>Last reminder</dt><dd>${esc(dateLabel(entry.lastRemindAt))}</dd></div>` : ''}</dl></section>
+    ${photos.length ? `<section class="entry-receipts"><div class="section-head"><h2>Attached receipts</h2><span class="tiny muted">${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}</span></div>${photoGallery(photos, entry.note || 'Receipt')}</section>` : ''}
+    ${entry.status === 'disputed' ? `<div class="product-notice">${Icon.info}<p>This line is questioned. Check the details with ${esc(friend.name)} before reopening it.</p></div><button class="btn btn--outline btn--block" data-entry-action="resolve">We agreed · reopen line</button>` : ''}
+    <div class="entry-secondary">${entry.status === 'open' && owed ? `<button class="product-text-link" data-entry-action="remind">${Icon.nudge} Remind ${esc(friend.name)}</button>` : ''}${entry.status === 'settled' || entry.status === 'void' ? '<button class="product-text-link" data-entry-action="reopen">Reopen this line</button>' : ''}${entry.status === 'open' && !entry.ownedByMe ? '<button class="product-text-link" data-entry-action="question">Question this line</button>' : ''}${entry.ownedByMe ? '<button class="product-text-link product-text-link--danger" data-entry-action="delete">Delete entry</button>' : ''}</div>
+    ${entry.status === 'open' ? `<footer class="product-foot"><button class="btn btn--primary btn--lg btn--block" data-record-payment>${Icon.check} ${entry.kind === 'money' ? 'Record payment' : 'Mark as done'}</button><p>${entry.kind === 'money' ? 'Record a payment made outside Udhaar.' : 'Keep the book up to date.'}</p></footer>` : ''}`, root => bindPhotoGallery(root, photos, entry.note || 'Receipt'));
+  root.querySelector('[data-record-payment]')?.addEventListener('click', () => navigate(`/friend/${friend.id}/settle/${entry.id}${ctx.query?.from ? `?from=${encodeURIComponent(ctx.query.from)}` : ''}`));
+  root.querySelectorAll('[data-entry-action]').forEach(button => button.onclick = async () => {
+    const action = button.dataset.entryAction;
+    if (action === 'delete') return confirmSheet({ title: 'Delete this entry?', body: 'Its note and receipts leave the ledger permanently.', confirmLabel: 'Delete entry', danger: true, onConfirm: async () => {
+      try { await api.removeEntry(entry.id); bus.emit('data-changed'); toastOk('Entry deleted.'); if (ctx.isCurrent?.() !== false) navigate(backTo); } catch (error) { toastError(error.message); }
+    } });
+    if (action === 'remind') {
+      button.disabled = true;
+      try { await openReminder(entry, friend, `${location.origin}/#/join?token=${data.inviteToken}`); }
+      finally { button.disabled = false; }
+      return;
+    }
+    const task = action === 'question' ? () => api.dispute(entry.id) : action === 'resolve' ? () => api.resolve(entry.id, 'keep') : () => api.reopen(entry.id);
+    confirmSheet({ title: action === 'question' ? 'Question this line?' : 'Reopen this line?', body: action === 'question' ? 'It will be marked as questioned while you check the details together.' : 'It will count as outstanding again. Make sure you both agree.', confirmLabel: action === 'question' ? 'Question line' : 'Reopen line', onConfirm: async () => {
+      try { await task(); bus.emit('data-changed'); if (ctx.isCurrent?.() !== false) navigate(currentRoute()); } catch (error) { toastError(error.message); }
+    } });
+  });
+}
+
+export async function viewPayment(ctx) {
+  const detailRoute = routeFor(ctx.params.id, ctx.params.entryId) + (ctx.query?.from ? `?from=${encodeURIComponent(ctx.query.from)}` : '');
+  const data = await loadPerson(ctx, 'Record payment', detailRoute, false);
+  if (!data) return;
+  const { friend } = data;
+  const entry = data.entries.find(item => item.id === ctx.params.entryId);
+  if (!entry || entry.status !== 'open') {
+    productMount(ctx, `<div class="product-empty"><span class="product-empty__icon">${Icon.checkCircle}</span><h1>${entry ? 'This line isn’t open.' : 'Entry unavailable.'}</h1><p>Check the latest details before recording a payment.</p><a class="btn btn--primary" href="#${esc(detailRoute)}">View entry</a></div>`);
+    return;
+  }
+  const monetary = entry.kind === 'money';
+  const owed = entry.direction === 'owed_to_me';
+  const personLine = `${owed ? esc(friend.name) : 'You'} ${monetary ? 'paid' : 'completed this for'} ${owed ? 'you' : esc(friend.name)}`;
+  let raw = String(entry.amount), stage = 'amount', sending = false, uncertainSave = false;
+  const renderForm = () => {
+    if (uncertainSave) return navigate(detailRoute);
+    setHeader({ title: monetary ? 'Record payment' : 'Close this line', sub: '01 / 02 · Details', back: true, backTo: detailRoute });
+    const root = productMount(ctx, `
+      <section class="payment-intro" data-product-ready><p class="eyebrow">${monetary ? 'Keep the book current' : KIND[entry.kind]}</p><h1>${monetary ? 'What was paid?' : 'A little thing,<br>taken care of.'}</h1><p class="product-lede">${monetary ? 'Already paid by cash, UPI, or bank transfer? Record it here.' : `Confirm this ${entry.kind === 'favor' ? 'favour' : 'promise'} is complete.`}</p></section>
+      <div class="payment-context">${avatarHTML({ name: friend.name, seed: friend.avatar_seed, size: 40, avatarUrl: friend.avatarUrl })}<div><strong>${esc(friend.name)}</strong><span>${esc(entry.note || KIND[entry.kind])}</span></div>${monetary ? `<b>${withSymbol(entry.amount)}<small>outstanding</small></b>` : ''}</div>
+      ${monetary ? `<section class="payment-input-panel"><label class="eyebrow" for="payment-amount">Amount ${owed ? 'received' : 'paid'} · ${esc(currencyCode())}</label><div class="payment-input"><span>${esc(symbol())}</span><input id="payment-amount" type="number" inputmode="decimal" min="0.01" step="0.01" max="${entry.amount}" value="${esc(raw)}" aria-describedby="payment-error" autocomplete="off"></div><div class="payment-presets"><button type="button" data-payment-preset="full">Full amount</button>${entry.amount > 0.01 ? '<button type="button" data-payment-preset="half">Half</button>' : ''}</div><p id="payment-error" class="payment-error" role="status"></p></section><div class="payment-remainder"><span>Remaining on this line</span><strong data-payment-remaining>${withSymbol(paymentPreview(raw, entry.amount).remaining)}</strong></div>` : `<div class="payment-note">${Icon.hands}<p>${esc(entry.note || KIND[entry.kind])}</p></div>`}
+      <p class="payment-explainer">${monetary ? `${owed ? 'Received less?' : 'Paid a part?'} The rest stays open, with its original note and receipts.` : 'You can reopen this line later if you need to.'}</p>
+      <footer class="product-foot"><button class="btn btn--primary btn--lg btn--block" data-review-payment>Review ${monetary ? 'payment' : 'record'} ${Icon.chevR}</button><p>${Icon.lock} ${friend.linked ? 'This updates your shared ledger.' : 'This updates only your book.'}</p></footer>`, null, { tabs: false });
+    const update = () => {
+      const preview = paymentPreview(raw, entry.amount);
+      root.querySelector('[data-payment-remaining]').textContent = withSymbol(preview.remaining);
+      root.querySelector('#payment-error').textContent = preview.valid ? '' : preview.error;
+      root.querySelector('#payment-amount').setAttribute('aria-invalid', String(!preview.valid));
+      const input = root.querySelector('#payment-amount');
+      input.style.fontSize = `${Math.max(24, Math.min(48, input.clientWidth / (Math.max(raw.length, 1) * .6)))}px`;
+      root.querySelector('[data-review-payment]').disabled = !preview.valid;
+      root.querySelectorAll('[data-payment-preset]').forEach(button => button.setAttribute('aria-pressed', preview.valid && preview.amount === (button.dataset.paymentPreset === 'full' ? entry.amount : Math.max(1, Math.round(entry.amount * 100 / 2)) / 100)));
+    };
+    if (monetary) {
+      root.querySelector('#payment-amount').oninput = event => { raw = event.target.value; update(); };
+      root.querySelectorAll('[data-payment-preset]').forEach(button => button.onclick = () => {
+        raw = String(button.dataset.paymentPreset === 'full' ? entry.amount : Math.max(1, Math.round(entry.amount * 100 / 2)) / 100);
+        root.querySelector('#payment-amount').value = raw; buzz(5); update();
+      });
+      update();
+    }
+    root.querySelector('[data-review-payment]').onclick = () => { stage = 'confirm'; renderConfirmation(); };
+  };
+  const renderConfirmation = () => {
+    const preview = monetary ? paymentPreview(raw, entry.amount) : { amount: 0, remaining: 0, valid: true };
+    if (!preview.valid) return renderForm();
+    setHeader({ title: 'Check the record', sub: '02 / 02 · Confirm', back: true, backTo: detailRoute, onBack: () => { if (!sending) { stage = 'amount'; renderForm(); } } });
+    const root = productMount(ctx, `<section class="payment-intro" data-product-ready><p class="eyebrow">One last look</p><h1>Ready to record.</h1><p class="product-lede">${personLine}.</p></section><section class="payment-receipt"><span class="eyebrow">${monetary ? 'Payment record' : 'Completed line'}</span><strong>${monetary ? withSymbol(preview.amount) : KIND[entry.kind]}</strong><p>${esc(entry.note || KIND[entry.kind])}</p><dl><div><dt>With</dt><dd>${esc(friend.name)}</dd></div><div><dt>Recorded today</dt><dd>${esc(dateLabel(Date.now()))}</dd></div>${monetary ? `<div><dt>Remaining</dt><dd>${withSymbol(preview.remaining)}</dd></div>` : ''}</dl></section><button class="product-text-link" data-edit-payment>${Icon.edit} Edit ${monetary ? 'amount' : 'record'}</button><div class="product-notice">${Icon.info}<p>${monetary ? 'Udhaar records payments you have already made. Confirming this does not move money.' : 'Confirm only when this favour or promise is complete.'}</p></div><p class="payment-inline-error" role="alert"></p><footer class="product-foot"><button class="btn btn--primary btn--lg btn--block" data-confirm-record>${Icon.check} Confirm record</button><p>You can undo this record after saving.</p></footer>`, null, { tabs: false });
+    root.querySelector('[data-edit-payment]').onclick = () => { if (!sending) { stage = 'amount'; renderForm(); } };
+    root.querySelector('[data-confirm-record]').onclick = async () => {
+      if (sending || stage !== 'confirm' || uncertainSave) return;
+      sending = true;
+      const button = root.querySelector('[data-confirm-record]');
+      button.disabled = true; button.innerHTML = '<span class="btn__spinner"></span> Recording…';
+      root.querySelector('[data-edit-payment]').disabled = true;
+      try {
+        const result = await api.settle(entry.id, monetary ? preview.amount : undefined);
+        bus.emit('data-changed');
+        if (ctx.isCurrent?.() === false) { toastOk('Record saved.'); return; }
+        stage = 'saved';
+        renderSuccess(result, { ...preview, remaining: monetary && result.entry.status === 'open' ? result.entry.amount : 0 });
+      } catch (error) {
+        const uncertain = !error.status || error.status >= 500;
+        uncertainSave = uncertain;
+        root.querySelector('.payment-inline-error').textContent = uncertain ? 'Couldn’t confirm whether this record saved. Open the latest entry before trying again.' : error.message;
+        if (uncertain) {
+          const link = document.createElement('a');
+          link.className = 'btn btn--outline btn--block'; link.href = `#${detailRoute}`; link.textContent = 'Check latest entry';
+          root.querySelector('.payment-inline-error').after(link);
+        }
+        button.disabled = uncertain; button.innerHTML = `${Icon.check} Confirm record`;
+        root.querySelector('[data-edit-payment]').disabled = uncertain;
+      } finally { sending = false; }
+    };
+  };
+  const renderSuccess = (result, preview) => {
+    setHeader({ title: 'Recorded', back: true, backTo: `/friend/${friend.id}` });
+    const root = productMount(ctx, `<section class="payment-success" data-product-ready><span class="payment-success__seal" aria-hidden="true">${Icon.check}</span><p class="eyebrow">The book is up to date</p><h1>${monetary ? 'Payment recorded' : 'Line completed'}</h1><p>${personLine}.</p>${monetary ? `<strong class="payment-success__amount">${withSymbol(preview.amount)}</strong>` : ''}</section><section class="payment-receipt payment-receipt--saved"><span class="eyebrow">${esc(entry.note || KIND[entry.kind])}</span><dl><div><dt>Recorded</dt><dd>${esc(dateLabel(Date.now()))}</dd></div><div><dt>Status</dt><dd>${preview.remaining ? 'Part payment' : 'Settled'}</dd></div>${monetary ? `<div><dt>Still outstanding</dt><dd>${withSymbol(preview.remaining)}</dd></div>` : ''}</dl></section><p class="payment-explainer">${preview.remaining ? 'The remaining amount stays on the original line.' : 'One less open line between you.'}</p><p class="payment-inline-error" role="alert"></p><footer class="product-foot"><a class="btn btn--primary btn--lg btn--block" href="#/friend/${esc(friend.id)}">Back to ${esc(friend.name)}</a><button class="product-text-link" data-undo-record>Undo this record</button></footer>`, null, { tabs: false });
+    root.querySelector('[data-undo-record]').onclick = async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try { await api.reopen(entry.id, result.settlementId); bus.emit('data-changed'); toastOk('Record undone.'); if (ctx.isCurrent?.() !== false) navigate(detailRoute, { replace: true }); }
+      catch (error) {
+        button.disabled = Boolean(!error.status || error.status >= 500);
+        root.querySelector('.payment-inline-error').textContent = button.disabled ? 'Couldn’t confirm the Undo. Open the ledger to check the latest amount.' : error.message;
+      }
+    };
+  };
+  renderForm();
+}
+
+export async function viewStory(ctx) {
+  const data = await loadPerson(ctx, 'Your story', `/friend/${ctx.params.id}`);
+  if (!data) return;
+  const { friend, entries, moments = [] } = data;
+  const totals = ledgerSummary(entries);
+  const items = [...entries.map(entry => ({ ...entry, type: 'entry', friendshipId: friend.id, at: entry.createdAt })), ...moments.map(moment => ({ ...moment, type: 'moment', at: new Date(`${moment.occurredOn}T12:00:00`).getTime() }))];
+  const first = items.length ? items.reduce((firstAt, item) => Math.min(firstAt, item.at), Infinity) : null;
+  const route = `/friend/${friend.id}/story`;
+  let filter = 'all';
+  const root = productMount(ctx, `<section class="story-cover" data-product-ready><div class="story-cover__identity">${avatarHTML({ name: friend.name, seed: friend.avatar_seed, size: 48, avatarUrl: friend.avatarUrl })}<span class="eyebrow">You + ${esc(friend.name)}</span></div><h1>More than<br>a balance.</h1><p>${first ? `In the book since ${esc(new Date(first).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }))}.` : 'The first page is yours to write.'}</p><div class="story-cover__stats"><div><b>${entries.length}</b><span>Ledger lines</span></div><div><b>${totals.settled}</b><span>Settled</span></div><div><b>${moments.length}${moments.length === 50 ? '+' : ''}</b><span>Private moments</span></div></div></section><div class="story-tools"><div class="product-segments" aria-label="Timeline contents"><button type="button" data-story-filter="all" aria-pressed="true">Everything</button><button type="button" data-story-filter="entry" aria-pressed="false">Entries</button><button type="button" data-story-filter="moment" aria-pressed="false">Moments</button></div><button class="product-text-link" data-add-moment>${Icon.plus} Add a moment</button></div><p class="story-privacy">${Icon.lock}<span>Moments are only yours. ${friend.linked ? 'Ledger entries are shared.' : 'This ledger is only in your book.'}${moments.length === 50 ? ' Showing the latest 50 moments.' : ''}</span></p><div class="story-timeline"></div>`, null);
+  const draw = () => {
+    const visible = items.filter(item => filter === 'all' || item.type === filter);
+    root.querySelectorAll('[data-story-filter]').forEach(button => button.setAttribute('aria-pressed', button.dataset.storyFilter === filter));
+    const timeline = root.querySelector('.story-timeline');
+    timeline.innerHTML = visible.length ? journalDays(visible).map(day => `<section class="story-day"><h2>${esc(dayLabel(day.at))}</h2><div class="story-day__items">${day.items.map(item => item.type === 'entry' ? journalRow(item, { showPerson: false, from: route }) : `<article class="story-moment"><div class="story-moment__heading"><span>${Icon.moment} A little moment</span><small>${Icon.lock} Only you</small></div>${photosFor(item).length ? photoGallery(photosFor(item), item.title) : ''}<h3>${esc(item.title)}</h3>${item.note ? `<p>${esc(item.note)}</p>` : ''}<button class="product-text-link" data-story-moment="${esc(item.id)}">View moment ${Icon.chevR}</button></article>`).join('')}</div></section>`).join('') : `<div class="journal-empty">${Icon.moment}<h2>${filter === 'moment' ? 'Keep something worth remembering.' : 'Your story starts here.'}</h2><p>${filter === 'moment' ? 'A photo, a thank-you, or a small detail. Only you will see it.' : 'Entries and private moments will appear here as you add them.'}</p></div>`;
+    bindEntryRoutes(timeline);
+    timeline.querySelectorAll('.story-moment').forEach(article => {
+      const item = moments.find(moment => moment.id === article.querySelector('[data-story-moment]').dataset.storyMoment);
+      bindPhotoGallery(article, photosFor(item), item.title);
+      article.querySelector('[data-story-moment]').onclick = () => openMomentSheet(item, friend, { onDeleted: () => { if (ctx.isCurrent?.() !== false) navigate(route); } });
+    });
+  };
+  root.querySelectorAll('[data-story-filter]').forEach(button => button.onclick = () => { filter = button.dataset.storyFilter; buzz(5); draw(); });
+  root.querySelector('[data-add-moment]').onclick = () => openMomentComposer(friend, { onSaved: () => { if (ctx.isCurrent?.() !== false) navigate(route); } });
+  draw();
+}

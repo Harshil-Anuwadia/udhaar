@@ -5,7 +5,7 @@
    - API writes: never intercepted; the app layer queues them instead.
 */
 
-const VERSION = 'v1.24.1';
+const VERSION = 'v1.25.0';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -22,6 +22,7 @@ const SHELL_ASSETS = [
   '/styles/auth-entry.css',
   '/styles/motion.css',
   '/styles/mobile-entry.css',
+  '/styles/product.css',
   '/js/entry.js',
   '/js/main.js',
   '/js/core/api.js',
@@ -29,6 +30,7 @@ const SHELL_ASSETS = [
   '/js/core/store.js',
   '/js/core/utils.js',
   '/js/core/group-position.js',
+  '/js/core/ledger-review.js',
   '/js/ui/icons.js',
   '/js/ui/sheet.js',
   '/js/ui/swipe.js',
@@ -45,6 +47,7 @@ const SHELL_ASSETS = [
   '/js/views/activity.js',
   '/js/views/auth.js',
   '/js/views/friend.js',
+  '/js/views/journal.js',
   '/js/views/groups.js',
   '/js/views/home.js',
   '/js/views/onboard.js',

@@ -95,6 +95,7 @@ function homeHTML({ friends }, stats) {
         <span>You owe</span>
       </div>
     </div>
+    <button class="netcard__review" type="button" data-nav="/review"><span>Review your ledger</span><span>${Icon.chevR}</span></button>
   </section>
 
   ${t.overdue > 0 ? `
@@ -126,7 +127,7 @@ function homeHTML({ friends }, stats) {
 
   ${recent ? `<section class="story-section">
     <div class="section-head"><h2>Pick up the story</h2><span class="tiny muted">Recently saved</span></div>
-    <button class="story-recent" data-person="${esc(recent.id)}">
+    <button class="story-recent" data-nav="/friend/${esc(recent.id)}/story">
       <span class="story-recent__icon" aria-hidden="true">${Icon.ledger}</span>
       <span class="grow"><strong>${esc(recent.lastEntry.note)}</strong><small>${esc(recent.name)} · ${esc(relTime(recent.lastEntry.created_at))}</small></span>
       ${Icon.chevR}
@@ -186,7 +187,7 @@ function bindHome(main, { friends }, stats) {
   main.querySelectorAll('[data-nav]').forEach((el) => {
     const go = () => { const to = el.dataset.nav; if (to) { buzz(6); navigate(to); } };
     el.addEventListener('click', go);
-    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    if (!el.matches('button,a')) el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
   });
 
   main.querySelectorAll('[data-person]').forEach((el) => {

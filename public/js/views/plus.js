@@ -17,6 +17,23 @@ import { Sheet } from '../ui/sheet.js';
 const PRICE_IN    = { lifetime: 49 };
 const PRICE_OTHER = { lifetime: 1 };
 
+const pendingReceipts = new Map();
+const receiptKey = owner => `udhaar.payment.${owner}`;
+function pendingReceipt(owner) {
+  if (!owner) return null;
+  if (pendingReceipts.has(owner)) return pendingReceipts.get(owner);
+  try { return JSON.parse(localStorage.getItem(receiptKey(owner)) || 'null'); } catch { return null; }
+}
+function rememberReceipt(owner, receipt) {
+  pendingReceipts.set(owner, receipt);
+  try { localStorage.setItem(receiptKey(owner), JSON.stringify(receipt)); }
+  catch { toastError('Keep this screen open until payment is confirmed; this device could not store the receipt.'); }
+}
+function forgetReceipt(owner) {
+  pendingReceipts.delete(owner);
+  try { localStorage.removeItem(receiptKey(owner)); } catch {}
+}
+
 // What Plus unlocks — described honestly, no marketing superlatives
 const UNLOCKS = [
   { t: 'Unlimited people',        d: 'Free includes 8. Plus has room for every flatmate, trip friend, and plus-one.' },
@@ -53,7 +70,7 @@ export async function viewPlus({ outlet, isCurrent = () => true }) {
   mount(outlet, 'app', () => `<div class="card skeleton" style="height:260px"></div>`);
 
   // Start loading Razorpay now so it's ready when the user taps
-  preloadRazorpay().catch(() => {});
+  if (!pendingReceipt(state.user?.id)) preloadRazorpay().catch(() => {});
 
   if (!isCurrent()) return;
   mount(outlet, 'app', () => plusHTML(), bind);
@@ -66,6 +83,7 @@ function plusHTML() {
   const cur   = u?.currency || 'INR';
   const price = cur === 'INR' ? PRICE_IN : PRICE_OTHER;
   const isPlus = u?.plan === 'plus';
+  const pending = pendingReceipt(u?.id);
 
   // ── Already a Plus user: confirm their access clearly ──────────────────────
   if (isPlus) {
@@ -104,10 +122,10 @@ function plusHTML() {
     </div>
 
     <div class="plus-cta">
-      <button class="btn btn--primary btn--lg btn--block" data-act="buy">
-        Unlock for ${symbol(cur)}${money(price.lifetime, cur)}
+      <button class="btn btn--primary btn--lg btn--block" data-act="${pending ? 'confirm' : 'buy'}">
+        ${pending ? 'Confirm payment' : `Unlock for ${symbol(cur)}${money(price.lifetime, cur)}`}
       </button>
-      <p class="tiny muted center">Secure payment via Razorpay</p>
+      <p class="tiny muted center">${pending ? 'Your receipt is saved. Confirming retries this payment and does not charge again.' : 'Secure payment via Razorpay'}</p>
     </div>
 
   </div>`;
@@ -117,67 +135,59 @@ function plusHTML() {
 
 function bind(main) {
   main.addEventListener('click', async (e) => {
-    const act = e.target.closest('[data-act]');
-    if (!act) return;
-
-    if (act.dataset.act === 'buy') {
-      const btn = act;
-      const original = btn.innerHTML;
+    const btn = e.target.closest('[data-act]');
+    if (!btn || !['buy', 'confirm'].includes(btn.dataset.act) || btn.disabled) return;
+    const owner = state.user?.id;
+    if (!owner) return navigate('/auth');
+    const original = btn.innerHTML;
+    const reset = () => {
+      btn.disabled = false;
+      btn.dataset.act = pendingReceipt(owner) ? 'confirm' : 'buy';
+      btn.innerHTML = pendingReceipt(owner) ? 'Confirm payment' : original;
+    };
+    const confirm = async receipt => {
+      rememberReceipt(owner, receipt);
       btn.disabled = true;
-      btn.innerHTML = '<span class="btn__spinner"></span> Connecting…';
-
+      btn.innerHTML = '<span class="btn__spinner"></span> Confirming…';
       try {
-        await preloadRazorpay();
-        const order = await api.post('/api/me/create-order');
-
-        const options = {
-          key:         order.key_id,
-          amount:      order.amount,
-          currency:    order.currency,
-          name:        'Udhaar',
-          description: 'Plus — Lifetime Access',
-          order_id:    order.order_id,
-          handler: async (response) => {
-            btn.innerHTML = '<span class="btn__spinner"></span> Confirming…';
-            try {
-              const res = await api.post('/api/me/verify-payment', {
-                razorpay_order_id:   response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature:  response.razorpay_signature,
-              });
-              setState({ user: res.user });
-              bus.emit('data-changed');
-              buzz([10, 30, 10]);
-              showPlusWelcome();
-            } catch (err) {
-              btn.disabled = false;
-              btn.innerHTML = original;
-              toastError('Payment verification failed. If money was deducted, contact support.');
-            }
-          },
-          modal: {
-            ondismiss: () => {
-              btn.disabled = false;
-              btn.innerHTML = original;
-            },
-          },
-          theme: { color: '#087F5B' },
-        };
-
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', (response) => {
-          toastError(response.error.description || 'Payment failed. Please try again.');
-          btn.disabled = false;
-          btn.innerHTML = original;
-        });
-        rzp.open();
-
+        if (state.user?.id !== owner) throw new Error('Sign back into the purchasing account to confirm this payment.');
+        const res = await api.post('/api/me/verify-payment', receipt);
+        if (state.user?.id !== owner) throw new Error('Sign back into the purchasing account to confirm this payment.');
+        forgetReceipt(owner);
+        setState({ user: res.user });
+        bus.emit('data-changed');
+        buzz([10, 30, 10]);
+        showPlusWelcome();
       } catch (err) {
-        btn.disabled = false;
-        btn.innerHTML = original;
-        toastError(err.message || 'Could not start payment. Try again.');
+        reset();
+        toastError(`${err.message || 'Confirmation is unavailable.'} Your receipt is saved. Retry confirmation; you will not be charged again.`);
       }
-    }
+    };
+    const pending = pendingReceipt(owner);
+    if (pending) return confirm(pending);
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn__spinner"></span> Connecting…';
+    try {
+      await preloadRazorpay();
+      const order = await api.post('/api/me/create-order');
+      if (state.user?.id !== owner) throw new Error('The signed-in account changed. Open Plus again to continue.');
+      const options = {
+        key: order.key_id, amount: order.amount, currency: order.currency,
+        name: 'Udhaar', description: 'Plus — Lifetime Access', order_id: order.order_id,
+        handler: response => confirm({
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature,
+        }),
+        modal: { ondismiss: reset }, theme: { color: '#087F5B' },
+      };
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', response => {
+        toastError(response.error.description || 'Payment failed. Please try again.');
+        reset();
+      });
+      rzp.open();
+    } catch (err) { reset(); toastError(err.message || 'Could not start payment. Try again.'); }
   });
 }
 

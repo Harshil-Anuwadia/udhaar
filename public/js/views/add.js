@@ -319,8 +319,8 @@ async function commit(draft, friend, friends) {
   } catch (e) {
     btn.disabled = false;
     btn.innerHTML = label;
-    if (e.status === 0) {
-      toastOk('Saved offline. It’ll post itself when you’re back.');
+    if (e.body?.queued) {
+      toastOk(e.message);
       exitCompose();
     } else if (e.status === 402) {
       navigate('/plus');

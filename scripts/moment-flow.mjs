@@ -64,6 +64,11 @@ try {
   await page.locator('.moment-row img').waitFor();
   await page.locator('.moment-row').click();
   assert.equal(await page.locator('.moment-detail .photo-gallery__item img').count(), 2, 'the Moment detail displays every selected photo');
+  await page.locator('.moment-detail .photo-gallery__item').nth(1).click();
+  await page.getByRole('dialog', { name: 'The café after the rain', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await page.locator('.lightbox').waitFor({ state: 'detached' });
+  assert.equal(await page.getByRole('dialog', { name: 'A little moment' }).isVisible(), true, 'closing a photo keeps the underlying Moment open');
   await page.getByRole('dialog', { name: 'A little moment' }).getByRole('button', { name: 'Close' }).click();
   const imageLoaded = await page.locator('.moment-row img').evaluate((img) => img.complete && img.naturalWidth > 0);
   assert.equal(imageLoaded, true, 'a browser image request can read the authorized private photo');
