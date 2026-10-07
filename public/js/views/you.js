@@ -87,7 +87,6 @@ function youHTML(u, stats, card, invites) {
       <div class="stat"><b class="num due-text">${shortMoney(t.youOwe, cur)}</b><span>You owe</span></div>
     </div>
     ${t.disputedEntries ? `<p class="tiny muted" style="margin-top:var(--s3)">${plural(t.disputedEntries, 'questioned line')} still in the book.</p>` : ''}
-    <button class="book-review-link" type="button" data-act="review"><span>${Icon.ledger}</span><span><strong>Review your ledger</strong><small>Find a line. Look back. Get the full picture.</small></span>${Icon.chevR}</button>
   </section>
 
   <section class="anim-rise" style="animation-delay:70ms">
@@ -180,7 +179,6 @@ function bindYou(main, stats, card, invites) {
       case 'card': return openCardSheet(card);
       case 'invite': return openInvite(state.friends?.length ? state.friends : (await api.friends()).friends);
       case 'plus': return navigate('/plus');
-      case 'review': return navigate('/review');
       case 'nudges': {
         const prefs = loadPrefs();
         const next = prefs.nudges === false;

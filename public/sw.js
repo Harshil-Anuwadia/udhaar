@@ -5,7 +5,7 @@
    - API writes: never intercepted; the app layer queues them instead.
 */
 
-const VERSION = 'v1.25.0';
+const VERSION = 'v1.26.0';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 

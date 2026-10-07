@@ -88,7 +88,6 @@ function friendHTML(f, entries, moments, history, inviteToken) {
     </div>
   </section>
 
-  <button class="person-story-link" type="button" data-act="story"><span>${Icon.ledger}</span><span><strong>Your story with ${esc(f.name)}</strong><small>${entries.length} ledger ${entries.length === 1 ? 'line' : 'lines'} · ${moments.length} private ${moments.length === 1 ? 'moment' : 'moments'}</small></span>${Icon.chevR}</button>
   ${disputed.length ? `
   <section class="anim-rise">
     <div class="section-head"><h2 style="color:var(--warn)">Disputed</h2></div>
@@ -122,8 +121,9 @@ function friendHTML(f, entries, moments, history, inviteToken) {
       <h2>Little moments</h2>
       <button type="button" data-act="moment">${Icon.moment} Add a moment</button>
     </div>
-    ${moments.length ? `<div class="moment-list">${moments.map(momentRow).join('')}</div>`
+    ${moments.length ? `<div class="moment-list">${moments.slice(0, 2).map(momentRow).join('')}</div>`
       : `<p class="moment-empty">A photo, a thank-you, or something you want to remember. Moments are private to you.</p>`}
+    <button class="person-story-link" type="button" data-act="story">${Icon.ledger}<span>View moments & entry history</span>${Icon.chevR}</button>
   </section>
 
   <section class="ledger-invite anim-rise">

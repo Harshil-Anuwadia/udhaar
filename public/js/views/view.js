@@ -44,7 +44,7 @@ export function mount(outlet, mode, renderFn, bindFn, { animate } = {}) {
   $('#app')?.classList.remove('is-bare');
   $('#bare')?.classList.add('hide');
   const main = $('#main');
-  main.classList.remove('main--flush');
+  main.classList.remove('main--flush', 'main--product');
 
 
   const path = currentPath();
@@ -62,6 +62,23 @@ export function mount(outlet, mode, renderFn, bindFn, { animate } = {}) {
 }
 
 export function rebind(outlet) { mounters.get('current')?.(outlet); }
+
+/** Mobile detail frame: content scrolls independently of the primary action. */
+export function mountProduct(outlet, renderFn, bindFn, { tabs = true } = {}) {
+  const screen = mount(outlet, 'app', () => `<div class="product-body">${renderFn()}</div>`, root => {
+    root.parentElement.classList.add('main--product');
+    root.classList.add('product-screen');
+    root.setAttribute('data-nopull', '');
+    const footer = root.querySelector('.product-foot');
+    if (footer) root.append(footer);
+    if (root.querySelector('.review-browser')) root.classList.add('product-screen--review');
+    if (root.querySelector('.story-timeline')) root.classList.add('product-screen--story');
+    if (!tabs) root.classList.add('product-screen--focused');
+    bindFn?.(root);
+  });
+  showTabs(tabs);
+  return screen;
+}
 
 /* -------------------------------- chrome --------------------------------- */
 
@@ -99,9 +116,17 @@ export function buildChrome() {
   // Header shadow follows the content region, not the window.
   const hdr = $('#hdr');
   const main = $('#main');
-  const onScroll = () => hdr.classList.toggle('is-stuck', main.scrollTop > 6);
-  main.addEventListener('scroll', onScroll, { passive: true });
+  const onScroll = () => hdr.classList.toggle('is-stuck', main.scrollTop > 6 || [...main.querySelectorAll('.product-body, .review-journal, .story-timeline')].some(pane => pane.scrollTop > 6));
+  main.addEventListener('scroll', onScroll, { passive: true, capture: true });
   onScroll();
+
+  // iOS can shrink the visible area for its keyboard without changing 100dvh.
+  // Keep focused detail flows within that area; pinch zoom keeps its normal behavior.
+  const syncVisibleHeight = () => {
+    if (window.visualViewport?.scale === 1) app.style.setProperty('--visible-height', `${window.visualViewport.height}px`);
+  };
+  window.visualViewport?.addEventListener('resize', syncVisibleHeight, { passive: true });
+  syncVisibleHeight();
 
   $('#tabAdd').addEventListener('click', () => { buzz(8); navigate('/add'); });
 

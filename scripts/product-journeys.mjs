@@ -59,19 +59,71 @@ try {
     }
   };
   const fits = async () => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1 || document.querySelector('#main').scrollWidth > document.querySelector('#main').clientWidth + 1), false, 'mobile layout has no horizontal overflow');
+  const viewportFits = async ({ content = false } = {}) => {
+    await page.locator('#boot').waitFor({ state: 'detached' });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await fits();
+    const metrics = await page.evaluate(() => {
+      const main = document.querySelector('#main');
+      const screen = document.querySelector('.product-screen');
+      const body = screen.querySelector('.product-body') || screen;
+      const footer = screen.querySelector('.product-foot');
+      const rect = element => element.getBoundingClientRect();
+      const action = footer?.querySelector('.btn--primary');
+      const actionBox = action && rect(action);
+      return {
+        pageOverflow: document.documentElement.scrollHeight - innerHeight,
+        mainOverflow: main.scrollHeight - main.clientHeight,
+        contentOverflow: body.scrollHeight - body.clientHeight,
+        screenBottom: rect(screen).bottom, mainBottom: rect(main).bottom,
+        footerFits: !footer || (rect(footer).top >= rect(main).top && rect(footer).bottom <= rect(main).bottom + 1),
+        actionReachable: !action || action.contains(document.elementFromPoint(actionBox.x + actionBox.width / 2, actionBox.y + actionBox.height / 2)),
+        actionHit: actionBox && document.elementFromPoint(actionBox.x + actionBox.width / 2, actionBox.y + actionBox.height / 2)?.outerHTML.slice(0, 180),
+      };
+    });
+    assert.ok(metrics.pageOverflow <= 1 && metrics.mainOverflow <= 1, `app shell must stay within the viewport: ${JSON.stringify(metrics)}`);
+    assert.ok(metrics.screenBottom <= metrics.mainBottom + 1 && metrics.footerFits && metrics.actionReachable, `screen and actions must fit and stay reachable: ${JSON.stringify(metrics)}`);
+    if (content) assert.ok(metrics.contentOverflow <= 1, `standard detail content must fit without scrolling: ${JSON.stringify(metrics)}`);
+  };
+  const controlsStayPut = async (scroller, controls) => {
+    const result = await page.evaluate(({ scroller, controls }) => {
+      const pane = document.querySelector(scroller);
+      const positions = () => controls.map(selector => {
+        const box = document.querySelector(selector).getBoundingClientRect();
+        return [box.top, box.bottom];
+      });
+      const before = positions();
+      pane.scrollTop = pane.scrollHeight;
+      return { before, after: positions(), scrolled: pane.scrollTop, height: pane.clientHeight, mainScroll: document.querySelector('#main').scrollTop };
+    }, { scroller, controls });
+    assert.deepEqual(result.after, result.before, 'scrolling content must not move navigation or actions');
+    assert.equal(result.mainScroll, 0, 'the outer app must not scroll');
+    assert.ok(result.scrolled > 0 && result.height >= 140, `content pane must scroll and have usable height: ${JSON.stringify(result)}`);
+    await page.locator(scroller).evaluate(pane => pane.scrollTop = 0);
+  };
+  const textContrast = async (selector, backgroundSelector) => {
+    const ratio = await page.evaluate(({ selector, backgroundSelector }) => {
+      const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+      const foreground = luminance(getComputedStyle(document.querySelector(selector)).color);
+      const background = luminance(getComputedStyle(document.querySelector(backgroundSelector)).backgroundColor);
+      return (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
+    }, { selector, backgroundSelector });
+    assert.ok(ratio >= 4.5, `text must remain readable after switching themes (${selector}: ${ratio.toFixed(2)}:1)`);
+  };
 
   await page.goto(base + '/#/');
   await page.getByRole('button', { name: /Review your ledger/ }).waitFor({ timeout: 6000 });
   await screenshot('home');
   await page.getByRole('button', { name: /Review your ledger/ }).click();
   await page.locator('#ledger-search').waitFor();
+  await viewportFits();
   await screenshot('review');
-  await page.locator('[data-status="overdue"]').click();
-  assert.equal(await page.locator('.review-journal .journal-row').count(), 2, 'overdue review uses real due dates');
-  await page.locator('[data-status="settled"]').click();
-  assert.equal(await page.locator('.review-journal .journal-row').count(), 1);
-  await page.locator('[data-status="all"]').click();
   await page.locator('.ledger-filter-details summary').click();
+  await page.locator('#ledger-status').selectOption('overdue');
+  assert.equal(await page.locator('.review-journal .journal-row').count(), 2, 'overdue review uses real due dates');
+  await page.locator('#ledger-status').selectOption('settled');
+  assert.equal(await page.locator('.review-journal .journal-row').count(), 1);
+  await page.locator('#ledger-status').selectOption('all');
   await page.locator('#ledger-month').selectOption('2026-09');
   assert.equal(await page.locator('.review-journal .journal-row').count(), 2);
   await page.locator('#ledger-direction').selectOption('owed_by_me');
@@ -145,11 +197,11 @@ try {
   await page.locator('#moment-title').fill('A long walk home');
   await page.getByRole('button', { name: 'Keep this moment' }).click();
   await page.getByRole('heading', { name: 'A long walk home' }).waitFor();
-  await page.getByRole('button', { name: 'Everything', exact: true }).click();
+  await page.getByRole('button', { name: 'All activity', exact: true }).click();
   await page.locator('.toast__close').evaluateAll(buttons => buttons.forEach(button => button.click()));
   await page.waitForFunction(() => !document.querySelector('.toast'));
   await screenshot('story');
-  await page.locator('#main').evaluate(main => main.scrollTop = 430);
+  await page.locator('.story-timeline').evaluate(pane => pane.scrollTop = 430);
   await screenshot('story-timeline');
 
   await page.goto(base + `/#/friend/${friend.id}`);
@@ -160,9 +212,11 @@ try {
   await page.locator('#hdrBack').click();
   await page.locator('.balance-hero').waitFor();
   await page.locator('[data-tab="you"]').click();
-  await page.locator('.book-review-link').waitFor();
+  await page.locator('.account-profile').waitFor();
+  assert.equal(await page.locator('.book-review-link').count(), 0, 'ledger review has one main entry point');
   await screenshot('account');
-  await page.locator('.book-review-link').click();
+  await page.locator('[data-tab="home"]').click();
+  await page.getByRole('button', { name: /Review your ledger/ }).click();
   await page.locator('#ledger-search').waitFor();
 
   await page.goto(base + '/#/review');
@@ -235,30 +289,100 @@ try {
   assert.equal(await page.locator('#hdrTitle').innerText(), 'Account');
   assert.equal(await page.locator('.account-profile').count(), 1);
 
-  for (const width of [320, 390, 430]) {
-    await page.setViewportSize({ width, height: 844 });
+  await page.locator('.toast__close').evaluateAll(buttons => buttons.forEach(button => button.click()));
+  await page.waitForFunction(() => !document.querySelector('.toast'));
+  for (const [width, height] of [[320, 568], [360, 640], [390, 844], [430, 932]]) {
+    await page.setViewportSize({ width, height });
     for (const route of ['/review', `/friend/${friend.id}/entry/${entry.id}`, `/friend/${friend.id}/settle/${entry.id}`, `/friend/${friend.id}/story`]) {
       await page.goto(base + '/#' + route);
       await page.locator('[data-product-ready]').waitFor();
-      await fits();
-      await page.evaluate(() => document.documentElement.dataset.theme = 'dark');
-      await fits();
+      await page.evaluate(async () => (await import('/js/core/store.js')).applyTheme('light'));
+      await viewportFits({ content: route.includes('/settle/') });
+      if (route.includes('/entry/')) { await textContrast('.entry-folio__note', '.entry-folio'); await textContrast('.entry-facts dd', '#app'); }
+      if (route === '/review') await controlsStayPut('.review-journal', ['#hdr', '.review-search-tools', '#tabbar']);
+      if (route.endsWith('/story') && height <= 640) await controlsStayPut('.story-timeline', ['#hdr', '.story-tools', '[data-add-moment]', '#tabbar']);
+      await screenshot(`viewport-${width}x${height}-${route.split('/').at(-2) === 'settle' ? 'payment' : route === '/review' ? 'review' : route.endsWith('/story') ? 'story' : 'entry'}`);
+      await page.evaluate(async () => (await import('/js/core/store.js')).applyTheme('dark'));
+      await viewportFits();
+      if (route.includes('/entry/')) { await textContrast('.entry-folio__note', '.entry-folio'); await textContrast('.entry-facts dd', '#app'); }
     }
   }
   await screenshot('story-dark');
   await page.goto(base + `/#/friend/${friend.id}/entry/${entry.id}`);
   await page.locator('[data-product-ready]').waitFor();
   await page.setViewportSize({ width: 320, height: 568 });
+  await viewportFits({ content: true });
+  // Model a visual viewport shrinking while the layout viewport stays tall (iOS keyboard).
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => {
+    Object.defineProperty(visualViewport, 'height', { configurable: true, value: 380 });
+    visualViewport.dispatchEvent(new Event('resize'));
+  });
+  await viewportFits();
+  assert.ok(await page.locator('.product-foot').evaluate(footer => footer.getBoundingClientRect().bottom <= 381), 'the primary action follows the visible viewport, not only the layout viewport');
+  await page.evaluate(() => {
+    delete visualViewport.height;
+    visualViewport.dispatchEvent(new Event('resize'));
+  });
+  await page.setViewportSize({ width: 320, height: 568 });
   await page.getByRole('button', { name: 'Record payment', exact: true }).click();
+  await page.locator('#payment-amount').waitFor();
+  await viewportFits({ content: true });
   await page.locator('#payment-amount').fill('10');
   await page.getByRole('button', { name: 'Review payment', exact: true }).click();
+  await viewportFits({ content: true });
+  await screenshot('short-confirmation');
   await page.getByRole('button', { name: 'Confirm record', exact: true }).click();
   await page.getByRole('heading', { name: 'Payment recorded' }).waitFor();
+  await viewportFits({ content: true });
+  await screenshot('short-recorded');
   await page.getByRole('button', { name: 'Undo this record' }).click();
   await page.getByRole('button', { name: 'Record payment', exact: true }).waitFor();
   await fits();
+  // Long details remain reachable while the primary action stays pinned.
+  await page.goto(base + `/#/friend/${friend.id}/entry/${receipt.id}`);
+  await page.locator('.entry-receipts').waitFor();
+  await viewportFits();
+  await controlsStayPut('.product-body', ['#hdr', '.product-foot']);
+  await screenshot('short-receipts');
+  // A reduced content viewport must keep the action visible and allow inner scrolling.
+  await page.goto(base + `/#/friend/${friend.id}/settle/${entry.id}`);
+  await page.locator('#payment-amount').waitFor();
+  await page.setViewportSize({ width: 390, height: 380 });
+  await viewportFits();
+  await controlsStayPut('.product-body', ['#hdr', '.product-foot']);
+  await page.setViewportSize({ width: 320, height: 568 });
+  await viewportFits({ content: true });
+  // Plus shares the detail frame: one purchase action, with its cost always visible.
+  for (const [width, height] of [[320, 568], [390, 844]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto(base + '/#/plus');
+    await page.locator('.plus-page').waitFor();
+    await page.evaluate(async () => (await import('/js/core/store.js')).applyTheme('light'));
+    await viewportFits({ content: true });
+    assert.equal(await page.locator('.plus-unlock').count(), 3);
+    assert.equal(await page.locator('.product-foot [data-act]').count(), 1, 'Plus has one purchase action');
+    assert.equal(await page.locator('#tabbar').isVisible(), false, 'Plus is a focused flow with a clear Back action');
+    assert.equal(await page.locator('.plus-price-block').evaluate(price => {
+      const box = price.getBoundingClientRect();
+      return price.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+    }), true, 'notifications cannot cover the Plus price');
+    await page.locator('.toast__close').evaluateAll(buttons => buttons.forEach(button => button.click()));
+    await page.waitForFunction(() => !document.querySelector('.toast'));
+    await screenshot(`plus-${width}x${height}`);
+  }
+  await db.prepare("UPDATE users SET plan = 'plus' WHERE id = ?").run(signup.user.id);
+  await page.reload();
+  await page.locator('.plus-settled').waitFor();
+  await page.setViewportSize({ width: 320, height: 568 });
+  await viewportFits({ content: true });
+  assert.equal(await page.locator('[data-act="buy"]').count(), 0, 'paid accounts are not offered another purchase');
+  await screenshot('plus-active-short');
+  await page.locator('#hdrBack').click();
+  await page.locator('.account-profile').waitFor();
+  assert.equal(await page.locator('#main').evaluate(main => main.classList.contains('main--product')), false, 'normal screens recover their existing scroll behavior');
   assert.deepEqual(errors, [], 'new mobile journeys have no browser exceptions');
-  console.log('Search, date/status/direction filters, entry Back, payment review/Undo, uncertain save, updated balances, private Moments, empty/error recovery, non-money completion, and 320/390/430px layouts passed.');
+  console.log('Mobile journeys, pinned controls, inner scrolling, 320×568 through 430×932 viewports, viewport shrink/restore, and Plus purchase/active states passed.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

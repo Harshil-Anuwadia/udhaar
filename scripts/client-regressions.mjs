@@ -135,15 +135,33 @@ test('B02: payment confirmation retries survive reload without purchasing again'
       };
     }, receipt);
     await page.goto(`${base}/?payment-fixture=1#/plus`, { waitUntil: 'networkidle' });
+    await page.setViewportSize({ width: 320, height: 568 });
+    const plusFits = async () => {
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(await page.evaluate(() => {
+        const main = document.querySelector('#main');
+        const body = main.querySelector('.product-body');
+        const footer = main.querySelector('.product-foot').getBoundingClientRect();
+        return main.scrollHeight > main.clientHeight + 1 || body.scrollHeight > body.clientHeight + 1 || footer.bottom > innerHeight + 1;
+      }), false, 'Plus content and its primary action fit a short phone');
+    };
+    await plusFits();
     const unavailable = page.waitForResponse(r => r.url().endsWith('/api/me/verify-payment'), { timeout: 5000 });
-    await page.getByRole('button', { name: /Unlock for/ }).click();
+    await page.getByRole('button', { name: 'Get lifetime Plus' }).click();
     assert.equal((await unavailable).status(), 503);
     await page.getByRole('button', { name: 'Confirm payment' }).waitFor({ timeout: 3000 });
     await page.reload({ waitUntil: 'networkidle' });
+    await plusFits();
+    assert.equal(await page.getByRole('button', { name: 'Get lifetime Plus' }).count(), 0, 'a saved receipt presents only confirmation');
+    assert.equal(await page.locator('.plus-price-block').count(), 0, 'confirmation does not offer a second purchase');
     await page.getByRole('button', { name: 'Confirm payment' }).click();
     await page.getByRole('dialog', { name: 'You have Plus.' }).waitFor();
     assert.equal(orders, 1, 'a confirmation retry never starts another charge');
     assert.equal(confirmations, 2);
     assert.equal((await db.prepare('SELECT plan FROM users WHERE id = ?').get(a.id)).plan, 'plus');
+    await page.getByRole('dialog', { name: 'You have Plus.' }).getByRole('button', { name: 'Close', exact: true }).click();
+    await page.locator('.sheet').waitFor({ state: 'detached' });
+    await plusFits();
+    assert.equal(await page.locator('[data-act="buy"], [data-act="confirm"]').count(), 0, 'active Plus replaces checkout immediately');
   } finally { await context.close(); }
 });

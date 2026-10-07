@@ -1,16 +1,11 @@
-/* Udhaar Plus — not a sales screen. Just an honest explanation of what's inside.
-   UX principles applied: Hick's Law (one plan, no choices), Cognitive Load (no
-   comparison tables), Occam's Razor (simplest layout that communicates the offer),
-   Mental Model (lifetime = one payment, clear immediately), Von Restorff (only the
-   CTA stands out), Proximity (price block grouped), Peak-End Rule (effort on the
-   post-purchase state, not on persuasion). */
+/* Plus: one lifetime purchase, or confirmation of a saved receipt. */
 
 import { h, esc, buzz, money, symbol } from '../core/utils.js';
 import { Icon } from '../ui/icons.js';
 import { api } from '../core/api.js';
 import { state, setState, bus } from '../core/store.js';
-import { mount, setHeader, showFab } from './view.js';
-import { navigate } from '../core/router.js';
+import { mountProduct, setHeader, showFab } from './view.js';
+import { navigate, currentPath } from '../core/router.js';
 import { toastError, toastOk } from '../ui/toast.js';
 import { Sheet } from '../ui/sheet.js';
 
@@ -36,10 +31,9 @@ function forgetReceipt(owner) {
 
 // What Plus unlocks — described honestly, no marketing superlatives
 const UNLOCKS = [
-  { t: 'Unlimited people',        d: 'Free includes 8. Plus has room for every flatmate, trip friend, and plus-one.' },
-  { t: 'Every entry, kept',       d: 'Free holds 120 lines. Plus keeps the canteen tabs and every new one, forever.' },
-  { t: 'Unlimited groups',        d: 'Beyond the 2 that come with free.' },
-  { t: 'All future Plus features',d: 'Anything we add to Plus, you get.' },
+  { t: 'Unlimited people', d: 'Free includes 8 people' },
+  { t: 'Unlimited entries', d: 'Free includes 120 ledger lines' },
+  { t: 'Unlimited groups', d: 'Free includes 2 groups' },
 ];
 
 /* ─── Razorpay loader ──────────────────────────────────────────────────────── */
@@ -65,15 +59,15 @@ function preloadRazorpay() {
 /* ─── View ─────────────────────────────────────────────────────────────────── */
 
 export async function viewPlus({ outlet, isCurrent = () => true }) {
-  setHeader({ title: 'Plus', back: true });
+  setHeader({ title: 'Udhaar Plus', back: true, backTo: '/you' });
   showFab(false);
-  mount(outlet, 'app', () => `<div class="card skeleton" style="height:260px"></div>`);
+  mountProduct(outlet, () => `<div class="card skeleton" style="height:260px"></div>`, null, { tabs: false });
 
   // Start loading Razorpay now so it's ready when the user taps
   if (!pendingReceipt(state.user?.id)) preloadRazorpay().catch(() => {});
 
   if (!isCurrent()) return;
-  mount(outlet, 'app', () => plusHTML(), bind);
+  mountProduct(outlet, plusHTML, bind, { tabs: false });
 }
 
 /* ─── HTML ─────────────────────────────────────────────────────────────────── */
@@ -88,21 +82,24 @@ function plusHTML() {
   // ── Already a Plus user: confirm their access clearly ──────────────────────
   if (isPlus) {
     return `
-    <div class="plus-settled anim-rise">
+    <div class="plus-settled" data-product-ready>
       <div class="plus-settled__icon">${Icon.checkCircle}</div>
       <h2>You have Plus</h2>
       <p>Lifetime access. Your people, entries, and groups have no limits.</p>
-      <a class="btn btn--outline btn--block" href="#/">Back to my ledger</a>
-    </div>`;
+    </div><footer class="product-foot"><a class="btn btn--primary btn--block" href="#/">Back to my ledger</a></footer>`;
+  }
+
+  if (pending) {
+    return `<div class="plus-settled" data-product-ready><div class="plus-settled__icon">${Icon.receipt}</div><h2>Finish activating Plus</h2><p>Your payment receipt is saved on this phone. Confirm it to activate lifetime access.</p></div><footer class="product-foot plus-cta"><button class="btn btn--primary btn--lg btn--block" data-act="confirm">Confirm payment</button><p>Uses your saved receipt. You won’t be charged again.</p></footer>`;
   }
 
   // ── Not yet a Plus user: explain what it is, then offer it ─────────────────
   return `
-  <div class="plus-page anim-rise">
+  <div class="plus-page" data-product-ready>
 
     <div class="plus-page__intro">
-      <h2>Udhaar Plus</h2>
-      <p>A one-time payment that removes the limits from your book. No subscription, no renewal — pay once and it's yours.</p>
+      <span class="plus-page__mark" aria-hidden="true">${Icon.crown}</span>
+      <h2>Your book,<br>without limits.</h2>
     </div>
 
     <ul class="plus-unlocks" aria-label="What Plus unlocks">
@@ -116,19 +113,17 @@ function plusHTML() {
       </li>`).join('')}
     </ul>
 
-    <div class="plus-price-block">
-      <span class="plus-price-block__amount num">${symbol(cur)}${money(price.lifetime, cur)}</span>
-      <span class="plus-price-block__note">One-time · Lifetime access · No subscription</span>
-    </div>
-
-    <div class="plus-cta">
-      <button class="btn btn--primary btn--lg btn--block" data-act="${pending ? 'confirm' : 'buy'}">
-        ${pending ? 'Confirm payment' : `Unlock for ${symbol(cur)}${money(price.lifetime, cur)}`}
+  </div>
+    <footer class="product-foot plus-cta">
+      <div class="plus-price-block">
+        <span class="plus-price-block__amount num">${symbol(cur)}${money(price.lifetime, cur)}</span>
+        <span class="plus-price-block__note">Pay once · Lifetime access<br>No subscription or renewal</span>
+      </div>
+      <button class="btn btn--primary btn--lg btn--block" data-act="buy">
+        Get lifetime Plus
       </button>
-      <p class="tiny muted center">${pending ? 'Your receipt is saved. Confirming retries this payment and does not charge again.' : 'Secure payment via Razorpay'}</p>
-    </div>
-
-  </div>`;
+      <p class="tiny muted center">Secure payment via Razorpay</p>
+    </footer>`;
 }
 
 /* ─── Interactions ─────────────────────────────────────────────────────────── */
@@ -157,9 +152,13 @@ function bind(main) {
         setState({ user: res.user });
         bus.emit('data-changed');
         buzz([10, 30, 10]);
-        showPlusWelcome();
+        if (currentPath() === '/plus') {
+          mountProduct(document.querySelector('#app'), plusHTML, bind, { tabs: false });
+          showPlusWelcome();
+        } else toastOk('Plus is active on your account.');
       } catch (err) {
         reset();
+        if (currentPath() === '/plus' && state.user?.id === owner) mountProduct(document.querySelector('#app'), plusHTML, bind, { tabs: false });
         toastError(`${err.message || 'Confirmation is unavailable.'} Your receipt is saved. Retry confirmation; you will not be charged again.`);
       }
     };
