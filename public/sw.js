@@ -5,7 +5,7 @@
    - API writes: never intercepted; the app layer queues them instead.
 */
 
-const VERSION = 'v1.27.0';
+const VERSION = 'v1.28.0';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -32,7 +32,7 @@ const SHELL_ASSETS = [
   '/js/core/store.js',
   '/js/core/utils.js',
   '/js/core/group-position.js',
-  '/js/core/ledger-review.js',
+  '/js/core/journal-helpers.js',
   '/js/ui/icons.js',
   '/js/ui/sheet.js',
   '/js/ui/swipe.js',

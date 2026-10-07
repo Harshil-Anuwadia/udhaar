@@ -74,7 +74,6 @@ export function mountProduct(outlet, renderFn, bindFn, { tabs = true } = {}) {
     if (root.querySelector('.plus-page, .plus-settled')) root.classList.add('product-screen--plus');
     if (root.querySelector('.entry-folio')) root.classList.add('product-screen--entry');
     if (root.querySelector('.payment-intro, .payment-receipt, .payment-success')) root.classList.add('product-screen--payment');
-    if (root.querySelector('.review-browser')) root.classList.add('product-screen--review');
     if (root.querySelector('.story-timeline')) root.classList.add('product-screen--story');
     if (!tabs) root.classList.add('product-screen--focused');
     bindFn?.(root);
@@ -119,7 +118,7 @@ export function buildChrome() {
   // Header shadow follows the content region, not the window.
   const hdr = $('#hdr');
   const main = $('#main');
-  const onScroll = () => hdr.classList.toggle('is-stuck', main.scrollTop > 6 || [...main.querySelectorAll('.product-body, .review-journal, .story-timeline')].some(pane => pane.scrollTop > 6));
+  const onScroll = () => hdr.classList.toggle('is-stuck', main.scrollTop > 6 || [...main.querySelectorAll('.product-body, .story-timeline')].some(pane => pane.scrollTop > 6));
   main.addEventListener('scroll', onScroll, { passive: true, capture: true });
   onScroll();
 
@@ -164,7 +163,7 @@ function tab(id, to, label, iconName) {
     </a>`;
 }
 
-const TAB_MAP = { '/': 'home', '/review': 'home', '/friend': 'home', '/groups': 'groups', '/group': 'groups', '/activity': 'alerts', '/you': 'you', '/plus': 'you' };
+const TAB_MAP = { '/': 'home', '/friend': 'home', '/groups': 'groups', '/group': 'groups', '/activity': 'alerts', '/you': 'you', '/plus': 'you' };
 
 export function syncChrome() {
   const path = currentPath();

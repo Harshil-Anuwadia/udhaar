@@ -22,7 +22,6 @@ const routes = {
   '/': lazyView('./views/home.js', 'viewHome'),
   '/add': lazyView('./views/add.js', 'viewAdd'),
   '/friend/:id': lazyView('./views/friend.js', 'viewFriend'),
-  '/review': lazyView('./views/journal.js', 'viewReview'),
   '/friend/:id/entry/:entryId': lazyView('./views/journal.js', 'viewEntry'),
   '/friend/:id/settle/:entryId': lazyView('./views/journal.js', 'viewPayment'),
   '/friend/:id/story': lazyView('./views/journal.js', 'viewStory'),
@@ -53,6 +52,8 @@ setGuard(async (path) => {
     return null;
   }
   if (!authed) return '/auth';
+  // Retired screen bookmarks return to People without adding a product route.
+  if (path === '/review') return '/';
   if (authed && state.user && !state.user.onboarded && path !== '/onboard') return '/onboard';
   return null;
 });

@@ -8,24 +8,21 @@ The new screens extend the product rather than introduce a second theme.
 
 | Screen | How to reach it | Purpose |
 | --- | --- | --- |
-| Ledger review | People → Review your ledger | Search the complete ledger, filter by status, recorded month, and direction, and open any entry. |
-| Entry details | Tap a person’s ledger line or a review result | See the amount, status, note, dates, author, receipts, and relevant actions together. |
+| Entry details | Tap a person’s ledger line | See the amount, status, note, dates, author, receipts, and relevant actions together. |
 | Record payment | Entry details → Record payment | Record a full or partial payment, review the remaining amount, confirm, and undo the specific record. Favours and promises have their own completion copy. |
 | Your story | Person → Little moments → View moments & entry history | Browse a chronological timeline of entries and private moments, view photos, and keep another moment. |
 | Udhaar Plus | Account → Udhaar Plus | See the three concrete upgrades and one-time price, purchase once, or finish confirming an existing payment. |
 
-Routes: `/#/review`, `/#/friend/:id/entry/:entryId`,
+Routes: `/#/friend/:id/entry/:entryId`,
 `/#/friend/:id/settle/:entryId`, and `/#/friend/:id/story`.
 
 ## Design decisions
 
-- Keep the familiar green balance panel. Place its next step inside the panel,
-  instead of adding another competing card to the overview.
+- Keep the familiar green balance panel. People open entries directly from each
+  person’s ledger. Retired Ledger review bookmarks return to People.
 - Fit these screens to the available mobile viewport. Headers, navigation, and
   primary actions stay in place; ledger rows, the timeline, and long details scroll
   inside their own panes. Short phone layouts retain 44px touch targets.
-- Put review filters in one expandable control. Show applied filters beside the
-  result count, and preserve them when returning from details.
 - Focus entry details on the amount, note, status, and a compact facts grid. Hide
   primary tabs in entry and payment flows; the header returns to their source.
 - Hide primary tabs during payment recording. Review Back returns to the amount
@@ -35,8 +32,8 @@ Routes: `/#/review`, `/#/friend/:id/entry/:entryId`,
   asks the user to check the latest entry before submitting another record.
 - Keep the forest-green story identity compact. Two choices, All activity and
   Moments, sit above the timeline. Private moments carry “Only you” labels.
-- Keep one ledger-review gateway on People. A person's Moments section previews
-  two moments and links to the complete timeline, without another large gateway.
+- A person's Moments section previews two moments and links to the complete
+  timeline.
 - Plus keeps its price and single purchase action together at the bottom. A saved
   receipt switches to confirmation only; active Plus immediately replaces checkout.
   Notifications stay above the body in focused flows so they cannot cover the price.
@@ -59,11 +56,11 @@ Routes: `/#/review`, `/#/friend/:id/entry/:entryId`,
 
 ## Verification
 
-`npm run test:ledger-review` checks monetary totals, cents, overdue/month/search
-filters, chronological grouping, and payment input boundaries.
+`npm run test:journal` checks chronological grouping and payment input boundaries,
+including fractional balances.
 
 `npm run test:product` uses Chromium, a temporary database, and the real API to
-check navigation, filters, review Back, partial payment and exact Undo, ambiguous
+check person-to-entry navigation, retired bookmarks, partial payment and exact Undo, ambiguous
 save handling, updated balances, private Moments, receipts, empty/error recovery,
 photo focus and restoration, reminder previews, bulk failures, and narrow mobile
 layouts from 320×568 to 430×932. It checks vertical fit, pinned controls, usable

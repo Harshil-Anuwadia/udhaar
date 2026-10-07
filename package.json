@@ -21,7 +21,7 @@
     "test:brand": "node scripts/brand-journey.mjs",
     "test:plus": "node --test --test-name-pattern=B02 scripts/client-regressions.mjs",
     "test:bugs:browser": "node --test scripts/client-regressions.mjs",
-    "test:ledger-review": "node --test scripts/ledger-review.test.mjs",
+    "test:journal": "node --test scripts/journal-helpers.test.mjs",
     "test:product": "node scripts/product-journeys.mjs",
     "start": "node server/start.js",
     "dev": "node --env-file=.env --watch server/start.js",

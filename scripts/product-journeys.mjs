@@ -117,27 +117,11 @@ try {
   };
 
   await page.goto(base + '/#/');
-  await page.getByRole('button', { name: /Review your ledger/ }).waitFor({ timeout: 6000 });
+  await page.locator(`[data-person="${friend.id}"]`).waitFor();
+  assert.equal(await page.locator('[data-nav="/review"]').count(), 0, 'People has no ledger-review shortcut');
   await screenshot('home');
-  await page.getByRole('button', { name: /Review your ledger/ }).click();
-  await page.locator('#ledger-search').waitFor();
-  await viewportFits();
-  await screenshot('review');
-  await page.locator('.ledger-filter-details summary').click();
-  await page.locator('#ledger-status').selectOption('overdue');
-  assert.equal(await page.locator('.review-journal .journal-row').count(), 2, 'overdue review uses real due dates');
-  await page.locator('#ledger-status').selectOption('settled');
-  assert.equal(await page.locator('.review-journal .journal-row').count(), 1);
-  await page.locator('#ledger-status').selectOption('all');
-  await page.locator('#ledger-month').selectOption('2026-09');
-  assert.equal(await page.locator('.review-journal .journal-row').count(), 2);
-  await page.locator('#ledger-direction').selectOption('owed_by_me');
-  assert.equal(await page.locator('.review-journal .journal-row').count(), 1);
-  await page.locator('#ledger-month').selectOption('all');
-  await page.locator('#ledger-direction').selectOption('all');
-  await page.locator('.ledger-filter-details summary').click();
-  await page.locator('#ledger-search').fill('Sana');
-  await page.getByRole('button', { name: /Train tickets/ }).click();
+  await page.locator(`[data-person="${friend.id}"]`).click();
+  await page.locator(`[data-entry="${entry.id}"]`).click();
   await page.getByRole('button', { name: 'Record payment', exact: true }).waitFor();
   await screenshot('entry');
   await page.getByRole('button', { name: 'Remind Sana', exact: true }).click();
@@ -145,9 +129,9 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Copy message' }).count(), 1, 'private ledgers retain a reminder message the user can choose to share');
   await page.getByRole('dialog', { name: 'Message ready' }).getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'Back', exact: true }).click();
-  await page.locator('#ledger-search').waitFor();
-  assert.equal(await page.locator('#ledger-search').inputValue(), 'Sana', 'detail Back restores the ledger search');
-  await page.getByRole('button', { name: /Train tickets/ }).click();
+  await page.locator('.balance-hero').waitFor();
+  assert.equal(new URL(page.url()).hash, `#/friend/${friend.id}`, 'detail Back returns to the person ledger');
+  await page.locator(`[data-entry="${entry.id}"]`).click();
   await page.getByRole('button', { name: 'Record payment', exact: true }).click();
   await page.locator('#payment-amount').fill('101');
   assert.equal(await page.getByRole('button', { name: 'Review payment', exact: true }).isEnabled(), false);
@@ -218,31 +202,30 @@ try {
   await page.locator('.balance-hero').waitFor();
   await page.locator('[data-tab="you"]').click();
   await page.locator('.account-profile').waitFor();
-  assert.equal(await page.locator('.book-review-link').count(), 0, 'ledger review has one main entry point');
+  assert.equal(await page.getByText('Ledger review', { exact: true }).count(), 0, 'Account has no ledger-review entry point');
   await screenshot('account');
   await page.locator('[data-tab="home"]').click();
-  await page.getByRole('button', { name: /Review your ledger/ }).click();
-  await page.locator('#ledger-search').waitFor();
-
-  await page.goto(base + '/#/review');
-  await page.locator('#ledger-search').waitFor();
-  await page.locator('#ledger-search').fill('Nothing should match this');
-  await page.getByRole('heading', { name: 'No lines match.' }).waitFor();
-  await page.getByRole('button', { name: 'Clear filters' }).click();
-  assert.equal(await page.locator('.review-journal .journal-row').count(), 7);
+  await page.locator(`[data-person="${friend.id}"]`).waitFor();
+  // Retired bookmarks redirect to People without keeping a product route.
+  await page.goto(base + '/#/review?status=open');
+  await page.waitForURL(base + '/#/');
+  await page.locator(`[data-person="${friend.id}"]`).waitFor();
+  await page.goto(base + `/#/friend/${friend.id}/entry/${entry.id}?from=${encodeURIComponent('/review?search=Sana')}`);
+  await page.locator('.entry-folio').waitFor();
+  await page.locator('#hdrBack').click();
+  await page.locator('.balance-hero').waitFor();
+  assert.equal(new URL(page.url()).hash, `#/friend/${friend.id}`, 'old review return links recover to the person ledger');
+  await page.goto(base + `/#/friend/${friend.id}/entry/${entry.id}`);
+  await page.locator('.entry-folio').waitFor();
   await db.prepare('UPDATE entries SET note = ? WHERE id = ?').run('Train tickets · revised', entry.id);
   await page.evaluate(async () => { const { bus } = await import('/js/core/store.js'); bus.emit('refresh'); });
-  await page.getByRole('button', { name: /Train tickets · revised/ }).waitFor({ timeout: 6000 });
-  await page.route('**/api/entries/export', route => route.fulfill({ status: 503, json: { message: 'Check your connection.' } }));
+  await page.getByText('Train tickets · revised', { exact: true }).waitFor({ timeout: 6000 });
+  await page.route(`**/api/friends/${friend.id}`, route => route.fulfill({ status: 503, json: { message: 'Check your connection.' } }));
   await page.reload();
   await page.getByRole('button', { name: 'Try again', exact: true }).waitFor();
-  await page.unroute('**/api/entries/export');
+  await page.unroute(`**/api/friends/${friend.id}`);
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
-  await page.locator('#ledger-search').waitFor();
-  await page.route('**/api/entries/export', route => route.fulfill({ json: { entries: [] } }));
-  await page.reload();
-  await page.getByRole('heading', { name: 'A clean first page.' }).waitFor();
-  await page.unroute('**/api/entries/export');
+  await page.locator('.entry-folio').waitFor();
 
   const { entry: favour } = await request('/api/entries', { friendshipId: friend.id, kind: 'favor', direction: 'owed_to_me', amount: 0, note: 'Bring the book back' });
   await page.goto(base + `/#/friend/${friend.id}/entry/${favour.id}`);
@@ -298,16 +281,15 @@ try {
   await page.waitForFunction(() => !document.querySelector('.toast'));
   for (const [width, height] of [[320, 568], [360, 640], [390, 844], [430, 932]]) {
     await page.setViewportSize({ width, height });
-    for (const route of ['/review', `/friend/${friend.id}/entry/${entry.id}`, `/friend/${friend.id}/settle/${entry.id}`, `/friend/${friend.id}/story`]) {
+    for (const route of [`/friend/${friend.id}/entry/${entry.id}`, `/friend/${friend.id}/settle/${entry.id}`, `/friend/${friend.id}/story`]) {
       await page.goto(base + '/#' + route);
       await page.locator('[data-product-ready]').waitFor();
       await page.evaluate(async () => (await import('/js/core/store.js')).applyTheme('light'));
       await viewportFits({ content: route.includes('/settle/') });
       await readable();
       if (route.includes('/entry/')) { await textContrast('.entry-folio__note', '.entry-folio'); await textContrast('.entry-facts dd', '#app'); }
-      if (route === '/review') await controlsStayPut('.review-journal', ['#hdr', '.review-search-tools', '#tabbar']);
       if (route.endsWith('/story') && height <= 640) await controlsStayPut('.story-timeline', ['#hdr', '.story-tools', '[data-add-moment]', '#tabbar']);
-      await screenshot(`viewport-${width}x${height}-${route.split('/').at(-2) === 'settle' ? 'payment' : route === '/review' ? 'review' : route.endsWith('/story') ? 'story' : 'entry'}`);
+      await screenshot(`viewport-${width}x${height}-${route.split('/').at(-2) === 'settle' ? 'payment' : route.endsWith('/story') ? 'story' : 'entry'}`);
       await page.evaluate(async () => (await import('/js/core/store.js')).applyTheme('dark'));
       await viewportFits();
       await readable();

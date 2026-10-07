@@ -3,7 +3,7 @@ import { esc, money, withSymbol, symbol, currencyCode, avatarHTML, formatDate, b
 import { api } from '../core/api.js';
 import { bus } from '../core/store.js';
 import { navigate, currentPath, currentQuery } from '../core/router.js';
-import { filterLedger, ledgerSummary, journalDays, localDay, paymentPreview } from '../core/ledger-review.js';
+import { journalDays, localDay, paymentPreview } from '../core/journal-helpers.js';
 import { Icon } from '../ui/icons.js';
 import { RecordSeal } from '../ui/product-art.js';
 import { toastOk, toastError } from '../ui/toast.js';
@@ -44,80 +44,20 @@ async function loadPerson(ctx, title, backTo, tabs = true) {
 
 function entryBack(ctx) {
   const from = ctx.query?.from;
-  if (typeof from === 'string' && (/^\/review(?:\?[^#]*)?$/.test(from) || from === `/friend/${ctx.params.id}/story`)) return from;
+  if (from === `/friend/${ctx.params.id}/story`) return from;
   return `/friend/${ctx.params.id}`;
 }
 
-function journalRow(entry, { showPerson = true, from = '' } = {}) {
-  const friend = entry.friend;
-  return `<button type="button" class="journal-row" data-entry-route="${esc(routeFor(entry.friendshipId || friend?.id, entry.id) + (from ? `?from=${encodeURIComponent(from)}` : ''))}">
-    <span class="journal-row__icon" aria-hidden="true">${showPerson && friend ? avatarHTML({ name: friend.name, seed: friend.avatarSeed, size: 34 }) : Icon[entry.kind === 'money' ? 'receipt' : entry.kind === 'favor' ? 'hands' : 'heart']}</span>
-    <span class="journal-row__copy"><strong>${esc(entry.note || KIND[entry.kind])}</strong><span>${showPerson && friend ? `${esc(friend.name)} · ` : ''}${STATUS[entry.status] || 'Closed'}${entry.overdue ? ' · overdue' : ''}</span></span>
+function journalRow(entry, { from = '' } = {}) {
+  return `<button type="button" class="journal-row" data-entry-route="${esc(routeFor(entry.friendshipId, entry.id) + (from ? `?from=${encodeURIComponent(from)}` : ''))}">
+    <span class="journal-row__icon" aria-hidden="true">${Icon[entry.kind === 'money' ? 'receipt' : entry.kind === 'favor' ? 'hands' : 'heart']}</span>
+    <span class="journal-row__copy"><strong>${esc(entry.note || KIND[entry.kind])}</strong><span>${STATUS[entry.status] || 'Closed'}${entry.overdue ? ' · overdue' : ''}</span></span>
     <span class="journal-row__amount ${entry.status === 'settled' || entry.status === 'void' ? 'is-settled' : entry.direction === 'owed_to_me' ? 'credit-text' : 'due-text'}"><b>${entry.kind === 'money' ? withSymbol(entry.amount) : entry.kind === 'favor' ? 'Favour' : 'Promise'}</b><small>${entry.status === 'settled' || entry.status === 'void' ? STATUS[entry.status].toLowerCase() : entry.direction === 'owed_to_me' ? 'owed to you' : 'you owe'}</small></span>
-    <span class="journal-row__chev" aria-hidden="true">${Icon.chevR}</span>
   </button>`;
 }
 
 function bindEntryRoutes(root) {
   root.querySelectorAll('[data-entry-route]').forEach(button => button.onclick = () => { buzz(6); navigate(button.dataset.entryRoute); });
-}
-
-export async function viewReview(ctx) {
-  setHeader({ title: 'Ledger review', sub: 'All your entries', back: true, backTo: '/' });
-  productMount(ctx, '<div class="skeleton" style="height:200px"></div><div class="skeleton" style="height:280px"></div>');
-  let entries;
-  try { ({ entries } = await api.exportEntries()); }
-  catch (error) { if (ctx.isCurrent?.() !== false) pageError(ctx, error, '/'); return; }
-  if (ctx.isCurrent?.() === false) return;
-  const totals = ledgerSummary(entries);
-  const months = [...new Set(entries.map(entry => localDay(entry.createdAt).slice(0, 7)))].sort().reverse();
-  const query = ctx.query || {};
-  const filters = {
-    status: ['all', 'open', 'settled', 'disputed', 'overdue'].includes(query.status) ? query.status : 'all',
-    direction: ['owed_to_me', 'owed_by_me'].includes(query.direction) ? query.direction : 'all',
-    month: months.includes(query.month) ? query.month : 'all', search: query.search || '',
-  };
-  const root = productMount(ctx, `
-    <section class="review-balances" data-product-ready aria-label="All outstanding money"><div><span>${Icon.arrowDown} Owed to you</span><strong class="credit-text">${withSymbol(totals.owedToYou)}</strong></div><div><span>${Icon.arrowUp} You owe</span><strong class="due-text">${withSymbol(totals.youOwe)}</strong></div><p>${totals.open} open ${totals.open === 1 ? 'line' : 'lines'}${totals.questioned ? ` · ${totals.questioned} questioned` : ''}<span>All dates</span></p></section>
-    <section class="review-browser" aria-label="Find an entry">
-      <div class="review-search-tools"><label class="ledger-search" for="ledger-search">${Icon.search}<input id="ledger-search" type="search" placeholder="Find a person or a note" value="${esc(filters.search)}" autocomplete="off" aria-label="Search your ledger"></label>
-      <details class="ledger-filter-details"><summary aria-label="Filter by date and direction" title="Filter by date and direction">${Icon.filter}<span data-filter-summary>All dates · Both sides</span>${Icon.chevD}</summary><div class="ledger-selects"><label class="ledger-status-select">Status<select id="ledger-status">${[['all', 'All entries'], ['open', 'Open'], ['settled', 'Settled'], ['disputed', 'Questioned'], ['overdue', 'Overdue']].map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select></label><label>Date<select id="ledger-month"><option value="all">All dates</option>${months.map(month => `<option value="${month}">${new Date(`${month}-01T12:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</option>`).join('')}</select></label><label>Direction<select id="ledger-direction"><option value="all">Both sides</option><option value="owed_to_me">Owed to you</option><option value="owed_by_me">You owe</option></select></label><button class="product-text-link" type="button" data-close-filters>Done</button></div></details></div>
-      <div class="journal-result-count" role="status" aria-live="polite"></div><div class="review-journal" tabindex="0" role="region" aria-label="Ledger entries"></div>
-    </section>`, null);
-  const filterPanel = root.querySelector('.ledger-filter-details');
-  root.querySelector('[data-close-filters]').onclick = () => { filterPanel.open = false; filterPanel.querySelector('summary').focus(); };
-  root.addEventListener('click', event => { if (!filterPanel.contains(event.target)) filterPanel.open = false; });
-  root.addEventListener('keydown', event => { if (event.key === 'Escape' && filterPanel.open) { filterPanel.open = false; filterPanel.querySelector('summary').focus(); } });
-  root.querySelector('#ledger-status').value = filters.status;
-  root.querySelector('#ledger-month').value = filters.month;
-  root.querySelector('#ledger-direction').value = filters.direction;
-  const update = () => {
-    const params = new URLSearchParams(Object.entries(filters).filter(([key, value]) => key === 'search' ? value.trim() : value !== 'all'));
-    const from = `/review${params.size ? `?${params}` : ''}`;
-    history.replaceState(null, '', `#${from}`);
-    const visible = filterLedger(entries, filters);
-    filterPanel.dataset.active = String(filters.status !== 'all' || filters.month !== 'all' || filters.direction !== 'all');
-    root.querySelector('[data-filter-summary]').textContent = `${root.querySelector('#ledger-month').selectedOptions[0].textContent} · ${root.querySelector('#ledger-direction').selectedOptions[0].textContent}`;
-    const applied = [filters.status !== 'all' && root.querySelector('#ledger-status').selectedOptions[0].textContent, filters.month !== 'all' && root.querySelector('#ledger-month').selectedOptions[0].textContent, filters.direction !== 'all' && root.querySelector('#ledger-direction').selectedOptions[0].textContent].filter(Boolean);
-    filterPanel.querySelector('summary').setAttribute('aria-label', `Filters${applied.length ? ` · ${applied.length} active` : ''}`);
-    root.querySelector('.journal-result-count').textContent = `${visible.length} ${visible.length === 1 ? 'line' : 'lines'}${applied.length ? ` · ${applied.join(' · ')}` : ' in the book'}`;
-    root.querySelector('.review-journal').innerHTML = visible.length ? journalDays(visible).map(day => `<section class="journal-day"><h2>${esc(dayLabel(day.at))}</h2><div>${day.items.map(entry => journalRow(entry, { from })).join('')}</div></section>`).join('') : `<div class="journal-empty">${Icon.search}<h2>${entries.length ? 'No lines match.' : 'A clean first page.'}</h2><p>${entries.length ? 'Try another name, date, or status.' : 'Add your first entry to start the story.'}</p>${entries.length ? '<button class="product-text-link" type="button" data-reset>Clear filters</button>' : '<a class="btn btn--primary" href="#/add">Add an entry</a>'}</div>`;
-    root.querySelector('.review-journal').scrollTop = 0;
-    bindEntryRoutes(root.querySelector('.review-journal'));
-    root.querySelector('[data-reset]')?.addEventListener('click', () => {
-      Object.assign(filters, { status: 'all', month: 'all', direction: 'all', search: '' });
-      root.querySelector('#ledger-search').value = '';
-      root.querySelector('#ledger-status').value = 'all';
-      root.querySelector('#ledger-month').value = 'all';
-      root.querySelector('#ledger-direction').value = 'all';
-      update();
-    });
-  };
-  root.querySelector('#ledger-search').oninput = event => { filters.search = event.target.value; update(); };
-  root.querySelector('#ledger-month').onchange = event => { filters.month = event.target.value; update(); };
-  root.querySelector('#ledger-direction').onchange = event => { filters.direction = event.target.value; update(); };
-  root.querySelector('#ledger-status').onchange = event => { filters.status = event.target.value; update(); };
-  update();
 }
 
 export async function viewEntry(ctx) {
@@ -250,17 +190,17 @@ export async function viewStory(ctx) {
   const data = await loadPerson(ctx, 'Your story', `/friend/${ctx.params.id}`);
   if (!data) return;
   const { friend, entries, moments = [] } = data;
-  const totals = ledgerSummary(entries);
+  const settled = entries.filter(entry => entry.status === 'settled').length;
   const items = [...entries.map(entry => ({ ...entry, type: 'entry', friendshipId: friend.id, at: entry.createdAt })), ...moments.map(moment => ({ ...moment, type: 'moment', at: new Date(`${moment.occurredOn}T12:00:00`).getTime() }))];
   const first = items.length ? items.reduce((firstAt, item) => Math.min(firstAt, item.at), Infinity) : null;
   const route = `/friend/${friend.id}/story`;
   let filter = 'all';
-  const root = productMount(ctx, `<section class="story-cover" data-product-ready><div class="story-cover__identity">${avatarHTML({ name: friend.name, seed: friend.avatar_seed, size: 40, avatarUrl: friend.avatarUrl })}<div><h1>You + ${esc(friend.name)}</h1><p>${first ? `Since ${esc(new Date(first).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }))}` : 'Your shared history'}</p></div><button class="product-text-link" data-add-moment>${Icon.plus}<span>Add a moment</span></button></div><div class="story-cover__stats"><div><b>${entries.length}</b><span>Ledger lines</span></div><div><b>${totals.settled}</b><span>Settled</span></div><div><b>${moments.length}${moments.length === 50 ? '+' : ''}</b><span>Private moments</span></div></div></section><div class="story-tools"><div class="product-segments" aria-label="Timeline contents"><button type="button" data-story-filter="all" aria-pressed="true">All activity</button><button type="button" data-story-filter="moment" aria-pressed="false">Moments</button></div></div><p class="story-privacy">${Icon.lock}<span>Moments are only yours. ${friend.linked ? 'Ledger entries are shared.' : 'This ledger is only in your book.'}${moments.length === 50 ? ' Showing the latest 50 moments.' : ''}</span></p><div class="story-timeline" tabindex="0" role="region" aria-label="Entries and private moments"></div>`, null);
+  const root = productMount(ctx, `<section class="story-cover" data-product-ready><div class="story-cover__identity">${avatarHTML({ name: friend.name, seed: friend.avatar_seed, size: 40, avatarUrl: friend.avatarUrl })}<div><h1>You + ${esc(friend.name)}</h1><p>${first ? `Since ${esc(new Date(first).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }))}` : 'Your shared history'}</p></div><button class="product-text-link" data-add-moment>${Icon.plus}<span>Add a moment</span></button></div><div class="story-cover__stats"><div><b>${entries.length}</b><span>Ledger lines</span></div><div><b>${settled}</b><span>Settled</span></div><div><b>${moments.length}${moments.length === 50 ? '+' : ''}</b><span>Private moments</span></div></div></section><div class="story-tools"><div class="product-segments" aria-label="Timeline contents"><button type="button" data-story-filter="all" aria-pressed="true">All activity</button><button type="button" data-story-filter="moment" aria-pressed="false">Moments</button></div></div><p class="story-privacy">${Icon.lock}<span>Moments are only yours. ${friend.linked ? 'Ledger entries are shared.' : 'This ledger is only in your book.'}${moments.length === 50 ? ' Showing the latest 50 moments.' : ''}</span></p><div class="story-timeline" tabindex="0" role="region" aria-label="Entries and private moments"></div>`, null);
   const draw = () => {
     const visible = items.filter(item => filter === 'all' || item.type === filter);
     root.querySelectorAll('[data-story-filter]').forEach(button => button.setAttribute('aria-pressed', button.dataset.storyFilter === filter));
     const timeline = root.querySelector('.story-timeline');
-    timeline.innerHTML = visible.length ? journalDays(visible).map(day => `<section class="story-day"><h2>${esc(dayLabel(day.at))}</h2><div class="story-day__items">${day.items.map(item => item.type === 'entry' ? journalRow(item, { showPerson: false, from: route }) : `<article class="story-moment"><div class="story-moment__heading"><span>${Icon.moment} A little moment</span><small>${Icon.lock} Only you</small></div>${photosFor(item).length ? photoGallery(photosFor(item), item.title) : ''}<h3>${esc(item.title)}</h3>${item.note ? `<p>${esc(item.note)}</p>` : ''}<button class="product-text-link" data-story-moment="${esc(item.id)}">View moment ${Icon.chevR}</button></article>`).join('')}</div></section>`).join('') : `<div class="journal-empty">${Icon.moment}<h2>${filter === 'moment' ? 'Keep something worth remembering.' : 'Your story starts here.'}</h2><p>${filter === 'moment' ? 'A photo, a thank-you, or a small detail. Only you will see it.' : 'Entries and private moments will appear here as you add them.'}</p></div>`;
+    timeline.innerHTML = visible.length ? journalDays(visible).map(day => `<section class="story-day"><h2>${esc(dayLabel(day.at))}</h2><div class="story-day__items">${day.items.map(item => item.type === 'entry' ? journalRow(item, { from: route }) : `<article class="story-moment"><div class="story-moment__heading"><span>${Icon.moment} A little moment</span><small>${Icon.lock} Only you</small></div>${photosFor(item).length ? photoGallery(photosFor(item), item.title) : ''}<h3>${esc(item.title)}</h3>${item.note ? `<p>${esc(item.note)}</p>` : ''}<button class="product-text-link" data-story-moment="${esc(item.id)}">View moment ${Icon.chevR}</button></article>`).join('')}</div></section>`).join('') : `<div class="journal-empty">${Icon.moment}<h2>${filter === 'moment' ? 'Keep something worth remembering.' : 'Your story starts here.'}</h2><p>${filter === 'moment' ? 'A photo, a thank-you, or a small detail. Only you will see it.' : 'Entries and private moments will appear here as you add them.'}</p></div>`;
     timeline.scrollTop = 0;
     bindEntryRoutes(timeline);
     timeline.querySelectorAll('.story-moment').forEach(article => {

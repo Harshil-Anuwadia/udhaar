@@ -95,13 +95,12 @@ function homeHTML({ friends }, stats) {
         <span>You owe</span>
       </div>
     </div>
-    <button class="netcard__review" type="button" data-nav="/review"><span>Review your ledger</span><span>${Icon.chevR}</span></button>
   </section>
 
   ${t.overdue > 0 ? `
   <button class="card overdue-row anim-rise" data-act="overdue" style="animation-delay:100ms">
       <span class="overdue-row__ico">${Icon.alert}</span>
-      <span class="grow small" style="color:var(--due-ink);text-align:left"><b>${t.overdue} overdue ${t.overdue === 1 ? 'entry' : 'entries'}</b> <span class="dim" style="color:inherit;opacity:.7">· tap to review</span></span>
+      <span class="grow small" style="color:var(--due-ink);text-align:left"><b>${t.overdue} overdue ${t.overdue === 1 ? 'entry' : 'entries'}</b> <span class="dim" style="color:inherit;opacity:.7">· view entries</span></span>
       ${Icon.chevR}
     </button>` : ''}
 
